@@ -1,0 +1,11 @@
+target/
+*.class
+*.jar
+*.war
+.idea/
+*.iml
+.vscode/
+.mvn/wrapper/maven-wrapper.jar
+.DS_Store
+*.log
+application-local.yml

@@ -1,0 +1,116 @@
+server:
+  port: ${SERVER_PORT:8082}
+  error:
+    include-message: always
+    include-binding-errors: always
+
+spring:
+  application:
+    name: analytics-service
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:analytics_db}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      idle-timeout: 30000
+      connection-timeout: 20000
+      max-lifetime: 1200000
+
+  jpa:
+    hibernate:
+      ddl-auto: ${DDL_AUTO:update}
+    show-sql: ${SHOW_SQL:false}
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: UTC
+    open-in-view: false
+
+  jackson:
+    default-property-inclusion: non_null
+    time-zone: UTC
+    serialization:
+      write-dates-as-timestamps: false
+
+# Auth Service integration (JWT validation via Feign, no local authentication)
+auth-service:
+  url: ${AUTH_SERVICE_URL:http://localhost:8081}
+  validate-token-path: /api/auth/validate
+
+# CORS allow-list for the frontend origin(s). Comma-separated for multiple
+# environments/domains, e.g. "https://app.example.com,https://staging.example.com".
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: 5000
+        readTimeout: 10000
+      auth-service:
+        connectTimeout: 3000
+        readTimeout: 5000
+      youtube-data-api:
+        connectTimeout: 5000
+        readTimeout: 10000
+
+# Application specific settings
+analytics:
+  sync:
+    cron: ${SYNC_CRON:0 0 * * * *} # every hour
+    enabled: ${SYNC_ENABLED:true}
+  supported-platforms: YOUTUBE,INSTAGRAM,TIKTOK,FACEBOOK,SPOTIFY
+  mock-data:
+    enabled: ${MOCK_DATA_ENABLED:true}
+
+# Real YouTube Data API v3 / Google OAuth 2.0 integration.
+# Disabled by default — MockSocialMediaClient handles YouTube accounts
+# until real Google Cloud OAuth credentials are supplied and this is
+# switched on. See README.md "Enabling the real YouTube integration".
+youtube:
+  enabled: ${YOUTUBE_INTEGRATION_ENABLED:false}
+  client-id: ${YOUTUBE_CLIENT_ID:}
+  client-secret: ${YOUTUBE_CLIENT_SECRET:}
+  redirect-uri: ${YOUTUBE_REDIRECT_URI:http://localhost:8082/api/oauth/youtube/callback}
+  scope: https://www.googleapis.com/auth/youtube.readonly
+  auth-uri: https://accounts.google.com/o/oauth2/v2/auth
+  token-uri: https://oauth2.googleapis.com/token
+  api-base-url: https://www.googleapis.com/youtube/v3
+  frontend-redirect-uri: ${YOUTUBE_FRONTEND_REDIRECT:http://localhost:3000/dashboard}
+  state-secret: ${YOUTUBE_STATE_SECRET:dev-only-change-me-in-production}
+
+jwt:
+  header: Authorization
+  prefix: "Bearer "
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
+
+logging:
+  level:
+    root: INFO
+    com.platform.analytics: DEBUG
+    org.hibernate.SQL: ${SHOW_SQL:false}
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
