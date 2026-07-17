@@ -1,6 +1,6 @@
-package com.platform.analytics.service;
+package com.platform.analytics.youtube.service;
 
-import com.platform.analytics.client.youtube.dto.GoogleTokenResponse;
+import com.platform.analytics.youtube.api.dto.GoogleTokenResponse;
 
 import java.util.UUID;
 

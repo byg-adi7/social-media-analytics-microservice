@@ -1,10 +1,9 @@
-package com.platform.analytics.controller;
+package com.platform.analytics.youtube;
 
-import com.platform.analytics.config.YouTubeProperties;
 import com.platform.analytics.dto.response.SocialAccountResponse;
-import com.platform.analytics.dto.response.YouTubeAuthorizationUrlResponse;
 import com.platform.analytics.security.SecurityContextUtil;
-import com.platform.analytics.service.YouTubeConnectionService;
+import com.platform.analytics.youtube.dto.YouTubeAuthorizationUrlResponse;
+import com.platform.analytics.youtube.service.YouTubeConnectionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
@@ -36,7 +35,7 @@ import java.util.UUID;
 @RequestMapping("/api/oauth/youtube")
 @RequiredArgsConstructor
 @Tag(name = "YouTube OAuth", description = "Real Google OAuth 2.0 flow for connecting a YouTube channel")
-public class OAuthController {
+public class YouTubeOAuthController {
 
     private final YouTubeConnectionService youTubeConnectionService;
     private final YouTubeProperties youTubeProperties;

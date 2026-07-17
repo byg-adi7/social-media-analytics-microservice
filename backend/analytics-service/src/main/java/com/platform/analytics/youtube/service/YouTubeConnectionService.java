@@ -1,4 +1,4 @@
-package com.platform.analytics.service;
+package com.platform.analytics.youtube.service;
 
 import com.platform.analytics.dto.response.SocialAccountResponse;
 

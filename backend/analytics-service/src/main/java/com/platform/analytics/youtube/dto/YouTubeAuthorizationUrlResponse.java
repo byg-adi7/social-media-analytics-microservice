@@ -1,4 +1,4 @@
-package com.platform.analytics.dto.response;
+package com.platform.analytics.youtube.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

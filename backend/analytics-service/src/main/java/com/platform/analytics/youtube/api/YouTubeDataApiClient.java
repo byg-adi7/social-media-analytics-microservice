@@ -1,8 +1,8 @@
-package com.platform.analytics.client.youtube;
+package com.platform.analytics.youtube.api;
 
-import com.platform.analytics.client.youtube.dto.YouTubeChannelListResponse;
-import com.platform.analytics.client.youtube.dto.YouTubeSearchListResponse;
-import com.platform.analytics.client.youtube.dto.YouTubeVideoListResponse;
+import com.platform.analytics.youtube.api.dto.YouTubeChannelListResponse;
+import com.platform.analytics.youtube.api.dto.YouTubeSearchListResponse;
+import com.platform.analytics.youtube.api.dto.YouTubeVideoListResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.GetMapping;

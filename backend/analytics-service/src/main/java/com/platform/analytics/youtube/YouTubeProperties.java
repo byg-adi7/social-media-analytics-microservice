@@ -1,4 +1,4 @@
-package com.platform.analytics.config;
+package com.platform.analytics.youtube;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 /**
  * Binds the {@code youtube.*} configuration block from application.yml.
  * Holds the Google OAuth 2.0 / YouTube Data API v3 settings needed for the
- * real YouTube integration (see {@link com.platform.analytics.client.YouTubeSocialMediaClient}).
+ * real YouTube integration (see {@link YouTubeSocialMediaClient}).
  */
 @Getter
 @Setter
@@ -36,11 +36,4 @@ public class YouTubeProperties {
      * (typically a frontend "accounts connected" page).
      */
     private String frontendRedirectUri = "http://localhost:3000/dashboard";
-
-    /**
-     * Secret used to HMAC-sign the OAuth {@code state} parameter so the
-     * callback (a public, unauthenticated endpoint) can trust which user
-     * initiated the flow without needing a server-side session store.
-     */
-    private String stateSecret = "dev-only-change-me-in-production";
 }

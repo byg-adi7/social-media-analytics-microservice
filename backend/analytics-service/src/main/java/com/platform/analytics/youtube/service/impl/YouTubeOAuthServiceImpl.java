@@ -1,11 +1,11 @@
-package com.platform.analytics.service.impl;
+package com.platform.analytics.youtube.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.platform.analytics.client.youtube.dto.GoogleTokenResponse;
-import com.platform.analytics.config.YouTubeProperties;
 import com.platform.analytics.exception.ExternalApiException;
 import com.platform.analytics.security.StateTokenService;
-import com.platform.analytics.service.YouTubeOAuthService;
+import com.platform.analytics.youtube.YouTubeProperties;
+import com.platform.analytics.youtube.api.dto.GoogleTokenResponse;
+import com.platform.analytics.youtube.service.YouTubeOAuthService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
  * real YouTube account.
  * <p>
  * Note on tooling: the rest of this service prefers Feign for outbound
- * calls (see {@link com.platform.analytics.client.youtube.YouTubeDataApiClient}),
+ * calls (see {@link com.platform.analytics.youtube.api.YouTubeDataApiClient}),
  * but Google's token endpoint requires an
  * {@code application/x-www-form-urlencoded} body, and Feign's default
  * encoder in this project is JSON. Rather than pull in an extra

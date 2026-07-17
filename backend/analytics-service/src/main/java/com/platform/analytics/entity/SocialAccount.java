@@ -88,7 +88,7 @@ public class SocialAccount extends BaseEntity {
 
     /**
      * Expiry timestamp of {@code accessToken}, used by real platform clients
-     * (e.g. {@link com.platform.analytics.client.YouTubeSocialMediaClient})
+     * (e.g. {@link com.platform.analytics.youtube.YouTubeSocialMediaClient})
      * to know when to proactively refresh via {@code refreshToken}. Null for
      * platforms/accounts using long-lived or mock tokens.
      */

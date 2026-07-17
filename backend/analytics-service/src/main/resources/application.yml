@@ -48,6 +48,12 @@ auth-service:
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
 
+# Shared OAuth settings used by every platform's connect flow (not specific
+# to any one platform's own client-id/secret/scopes, which live under that
+# platform's own config block, e.g. youtube.*).
+oauth:
+  state-secret: ${OAUTH_STATE_SECRET:dev-only-change-me-in-production}
+
 feign:
   client:
     config:
@@ -84,7 +90,6 @@ youtube:
   token-uri: https://oauth2.googleapis.com/token
   api-base-url: https://www.googleapis.com/youtube/v3
   frontend-redirect-uri: ${YOUTUBE_FRONTEND_REDIRECT:http://localhost:3000/dashboard}
-  state-secret: ${YOUTUBE_STATE_SECRET:dev-only-change-me-in-production}
 
 jwt:
   header: Authorization

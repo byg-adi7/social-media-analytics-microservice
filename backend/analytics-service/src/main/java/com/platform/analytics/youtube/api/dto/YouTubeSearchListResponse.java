@@ -1,4 +1,4 @@
-package com.platform.analytics.client.youtube.dto;
+package com.platform.analytics.youtube.api.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 

@@ -22,20 +22,22 @@ Controller  →  Service (interface)  →  ServiceImpl  →  Repository  →  En
 - **entity** — JPA entities (`SocialAccount`, `Analytics`).
 - **dto.request / dto.response** — API contracts, decoupled from entities.
 - **mapper** — MapStruct entity ↔ DTO conversion.
-- **client** — `SocialMediaClient` abstraction + `MockSocialMediaClient` (swap for real platform APIs later) and `AuthServiceClient` (Feign, JWT validation).
-- **security** — stateless JWT filter that delegates validation to the Auth Service; never parses/verifies tokens locally.
+- **client** — the generic `SocialMediaClient` abstraction, `MockSocialMediaClient` (simulated data fallback for any platform without a real integration yet), `SocialMediaClientResolver` (prefers a real client over the mock when both exist for a platform), and `AuthServiceClient` (Feign, JWT validation). Platform-specific code does **not** live here — see below.
+- **youtube** (and, as they're built, **instagram** / **facebook** / **spotify** / **tiktok**) — each real platform integration is a self-contained top-level package with its own OAuth service, API client (`youtube.api`), external API response DTOs (`youtube.api.dto`), outward-facing DTOs (`youtube.dto`), service/service.impl, controller, and `*Properties` config class. Nothing outside the platform's own package needs to change to add one — see Extensibility below.
+- **security** — stateless JWT filter that delegates validation to the Auth Service; never parses/verifies tokens locally. Also holds `StateTokenService`, the HMAC OAuth-state signer shared by every platform's connect flow.
 - **exception** — typed exceptions + `GlobalExceptionHandler` for consistent error responses.
 - **util / validator / constant** — calculation engine, shared helpers, enums.
 - **scheduler** — hourly automatic synchronization job.
-- **config** — Security, Feign, OpenAPI, JPA auditing configuration.
+- **config** — Security, CORS, shared OAuth (`OAuthProperties`), Feign, OpenAPI, JPA auditing configuration.
 
 ### Extensibility
 
-Adding a new platform (X, LinkedIn, Twitch) requires only:
+Adding a new platform (Instagram, Facebook, Spotify, TikTok, or beyond) requires only:
 1. A new `Platform` enum constant.
-2. A new `SocialMediaClient` implementation (or extend the mock) registered as a Spring bean.
+2. A new top-level package (e.g. `com.platform.analytics.instagram`) containing that platform's OAuth service, API client, DTOs, and a `SocialMediaClient` implementation — following the `youtube` package as the reference pattern.
+3. Registering the client as a Spring bean (typically gated behind an `<platform>.enabled` property via `@ConditionalOnProperty`, exactly as `YouTubeSocialMediaClient` is).
 
-No controller, service, or repository code needs to change — the sync scheduler, calculations, and chart endpoints iterate over `Platform.values()` and any bean implementing `SocialMediaClient`.
+No controller, service, or repository code outside that new package needs to change — the sync scheduler, calculations, and chart endpoints iterate over `Platform.values()` and any bean implementing `SocialMediaClient`.
 
 ---
 
@@ -46,7 +48,7 @@ No controller, service, or repository code needs to change — the sync schedule
 |---|---|
 | id (UUID, PK) | |
 | userId | owning creator |
-| platform | enum: YOUTUBE, INSTAGRAM, TIKTOK, FACEBOOK |
+| platform | enum: YOUTUBE, INSTAGRAM, TIKTOK, FACEBOOK, SPOTIFY |
 | accountId | external platform account id |
 | accountName, username, profileImage | |
 | accessToken, refreshToken | never exposed in API responses |
@@ -190,7 +192,7 @@ YOUTUBE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 YOUTUBE_CLIENT_SECRET=your-client-secret
 YOUTUBE_REDIRECT_URI=http://localhost:8082/api/oauth/youtube/callback
 YOUTUBE_FRONTEND_REDIRECT=http://localhost:3000/dashboard
-YOUTUBE_STATE_SECRET=some-long-random-production-secret
+OAUTH_STATE_SECRET=some-long-random-production-secret
 ```
 
 4. Frontend flow: call `GET /api/oauth/youtube/authorize` (authenticated) → redirect the browser to the returned `authorizationUrl` → after the user approves, Google redirects to the public `/api/oauth/youtube/callback` endpoint → the service exchanges the code, fetches the channel, saves/updates the `SocialAccount`, runs an initial sync, and redirects the browser to `YOUTUBE_FRONTEND_REDIRECT`.
@@ -222,7 +224,7 @@ The OAuth `state` parameter is HMAC-signed (`StateTokenService`) rather than rel
 | `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET` | — | Google OAuth 2.0 credentials |
 | `YOUTUBE_REDIRECT_URI` | http://localhost:8082/api/oauth/youtube/callback | Must match the Google Cloud Console redirect URI |
 | `YOUTUBE_FRONTEND_REDIRECT` | http://localhost:3000/dashboard | Where the browser lands after a successful connect |
-| `YOUTUBE_STATE_SECRET` | dev-only-change-me-in-production | HMAC secret signing the OAuth `state` parameter — **set a strong value in production** |
+| `OAUTH_STATE_SECRET` | dev-only-change-me-in-production | HMAC secret signing the OAuth `state` parameter for every platform's connect flow — **set a strong value in production** |
 
 ### Run Locally
 

@@ -16,7 +16,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * requests are validated against the central Auth Service via Feign.
  */
 @SpringBootApplication
-@EnableFeignClients(basePackages = "com.platform.analytics.client")
+@EnableFeignClients(basePackages = "com.platform.analytics")
 @EnableScheduling
 public class AnalyticsServiceApplication {
 

@@ -1,16 +1,18 @@
-package com.platform.analytics.client;
+package com.platform.analytics.youtube;
 
-import com.platform.analytics.client.youtube.YouTubeDataApiClient;
-import com.platform.analytics.client.youtube.dto.GoogleTokenResponse;
-import com.platform.analytics.client.youtube.dto.YouTubeChannelListResponse;
-import com.platform.analytics.client.youtube.dto.YouTubeSearchListResponse;
-import com.platform.analytics.client.youtube.dto.YouTubeVideoListResponse;
+import com.platform.analytics.client.MockSocialMediaClient;
+import com.platform.analytics.client.SocialMediaClient;
 import com.platform.analytics.constant.Platform;
 import com.platform.analytics.dto.response.TopContentResponse;
 import com.platform.analytics.entity.SocialAccount;
 import com.platform.analytics.exception.ExternalApiException;
 import com.platform.analytics.repository.SocialAccountRepository;
-import com.platform.analytics.service.YouTubeOAuthService;
+import com.platform.analytics.youtube.api.YouTubeDataApiClient;
+import com.platform.analytics.youtube.api.dto.GoogleTokenResponse;
+import com.platform.analytics.youtube.api.dto.YouTubeChannelListResponse;
+import com.platform.analytics.youtube.api.dto.YouTubeSearchListResponse;
+import com.platform.analytics.youtube.api.dto.YouTubeVideoListResponse;
+import com.platform.analytics.youtube.service.YouTubeOAuthService;
 import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,11 +31,10 @@ import java.util.stream.Collectors;
  * the YouTube Data API v3 and the connected creator's own OAuth token.
  * <p>
  * Only created when {@code youtube.enabled=true} (see
- * {@link com.platform.analytics.config.YouTubeProperties}). When disabled —
- * the default, since it requires real Google Cloud OAuth credentials —
- * {@link MockSocialMediaClient} continues to handle YouTube accounts, so
- * the rest of the service (scheduler, calculations, endpoints) works
- * unchanged either way.
+ * {@link YouTubeProperties}). When disabled — the default, since it
+ * requires real Google Cloud OAuth credentials — {@link MockSocialMediaClient}
+ * continues to handle YouTube accounts, so the rest of the service
+ * (scheduler, calculations, endpoints) works unchanged either way.
  * <p>
  * <b>Known limitation:</b> the YouTube Data API only exposes cumulative
  * channel totals (all-time subscriber/view counts), not day-by-day deltas.

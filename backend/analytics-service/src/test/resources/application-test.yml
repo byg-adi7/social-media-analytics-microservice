@@ -27,6 +27,8 @@ youtube:
   enabled: false
   redirect-uri: http://localhost:8082/api/oauth/youtube/callback
   frontend-redirect-uri: http://localhost:3000/dashboard
+
+oauth:
   state-secret: test-secret
 
 logging:

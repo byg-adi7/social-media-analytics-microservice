@@ -1,9 +1,5 @@
-package com.platform.analytics.service.impl;
+package com.platform.analytics.youtube.service.impl;
 
-import com.platform.analytics.client.youtube.YouTubeDataApiClient;
-import com.platform.analytics.client.youtube.dto.GoogleTokenResponse;
-import com.platform.analytics.client.youtube.dto.YouTubeChannelListResponse;
-import com.platform.analytics.config.YouTubeProperties;
 import com.platform.analytics.constant.Platform;
 import com.platform.analytics.dto.response.SocialAccountResponse;
 import com.platform.analytics.entity.SocialAccount;
@@ -13,8 +9,12 @@ import com.platform.analytics.mapper.SocialAccountMapper;
 import com.platform.analytics.repository.SocialAccountRepository;
 import com.platform.analytics.security.StateTokenService;
 import com.platform.analytics.service.AnalyticsSyncService;
-import com.platform.analytics.service.YouTubeConnectionService;
-import com.platform.analytics.service.YouTubeOAuthService;
+import com.platform.analytics.youtube.YouTubeProperties;
+import com.platform.analytics.youtube.api.YouTubeDataApiClient;
+import com.platform.analytics.youtube.api.dto.GoogleTokenResponse;
+import com.platform.analytics.youtube.api.dto.YouTubeChannelListResponse;
+import com.platform.analytics.youtube.service.YouTubeConnectionService;
+import com.platform.analytics.youtube.service.YouTubeOAuthService;
 import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

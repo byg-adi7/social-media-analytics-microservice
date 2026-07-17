@@ -1,6 +1,6 @@
 package com.platform.analytics.security;
 
-import com.platform.analytics.config.YouTubeProperties;
+import com.platform.analytics.config.OAuthProperties;
 import com.platform.analytics.exception.UnauthorizedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,7 +16,7 @@ class StateTokenServiceTest {
 
     @BeforeEach
     void setUp() {
-        YouTubeProperties properties = new YouTubeProperties();
+        OAuthProperties properties = new OAuthProperties();
         properties.setStateSecret("unit-test-secret");
         stateTokenService = new StateTokenService(properties);
     }
@@ -63,7 +63,7 @@ class StateTokenServiceTest {
         UUID userId = UUID.randomUUID();
         String state = stateTokenService.generateState(userId);
 
-        YouTubeProperties otherProperties = new YouTubeProperties();
+        OAuthProperties otherProperties = new OAuthProperties();
         otherProperties.setStateSecret("a-completely-different-secret");
         StateTokenService otherService = new StateTokenService(otherProperties);
 

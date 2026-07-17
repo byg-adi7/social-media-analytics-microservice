@@ -11,20 +11,20 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.UUID;
 
-import com.platform.analytics.config.YouTubeProperties;
+import com.platform.analytics.config.OAuthProperties;
 
 /**
- * Signs and verifies the OAuth {@code state} query parameter used in the
- * YouTube-connect flow.
+ * Signs and verifies the OAuth {@code state} query parameter used by every
+ * platform's connect flow (YouTube, and any platform added after it).
  * <p>
- * The OAuth callback endpoint is necessarily public (Google redirects the
- * user's raw browser there — it cannot carry our {@code Authorization}
- * header). To still know <em>which of our users</em> is completing the
- * flow, we HMAC-sign {@code userId:issuedAt:nonce} when generating the
- * authorization URL (while the user is authenticated) and verify that
- * signature — plus a short expiry window — on callback. This avoids
- * needing a server-side session store for a single-instance university
- * project while still being tamper-resistant.
+ * A platform's OAuth callback endpoint is necessarily public (the provider
+ * redirects the user's raw browser there — it cannot carry our
+ * {@code Authorization} header). To still know <em>which of our users</em>
+ * is completing the flow, we HMAC-sign {@code userId:issuedAt:nonce} when
+ * generating the authorization URL (while the user is authenticated) and
+ * verify that signature — plus a short expiry window — on callback. This
+ * avoids needing a server-side session store while still being
+ * tamper-resistant.
  */
 @Component
 @RequiredArgsConstructor
@@ -33,7 +33,7 @@ public class StateTokenService {
     private static final String HMAC_ALGORITHM = "HmacSHA256";
     private static final long STATE_TTL_SECONDS = 600; // 10 minutes
 
-    private final YouTubeProperties youTubeProperties;
+    private final OAuthProperties oAuthProperties;
 
     public String generateState(UUID userId) {
         long issuedAt = Instant.now().getEpochSecond();
@@ -79,7 +79,7 @@ public class StateTokenService {
         try {
             Mac mac = Mac.getInstance(HMAC_ALGORITHM);
             mac.init(new SecretKeySpec(
-                    youTubeProperties.getStateSecret().getBytes(StandardCharsets.UTF_8), HMAC_ALGORITHM));
+                    oAuthProperties.getStateSecret().getBytes(StandardCharsets.UTF_8), HMAC_ALGORITHM));
             byte[] hash = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
             return Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
         } catch (Exception ex) {
