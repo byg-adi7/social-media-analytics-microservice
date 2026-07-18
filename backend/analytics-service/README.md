@@ -201,6 +201,56 @@ The OAuth `state` parameter is HMAC-signed (`StateTokenService`) rather than rel
 
 ---
 
+## Real Spotify Integration
+
+**Spotify** also has a real, OAuth-backed implementation — `SpotifySocialMediaClient` — but it is a fundamentally different *kind* of integration than YouTube/Instagram/Facebook, and that's worth understanding before connecting an account.
+
+### The hard limitation: Spotify has no public API for artist streaming analytics
+
+Monthly listeners, stream counts, and playlist adds — the numbers an artist actually cares about — live only in the private **Spotify for Artists** dashboard, which has no public API. The closest thing, Spotify's "Provider API," is restricted to labels/distributors with a direct distribution deal with Spotify. Neither is available to a third-party platform like this one, and there is no workaround — this is a Spotify platform restriction, not a gap in this implementation.
+
+What the public **Spotify Web API** *does* provide is different in kind: the connected user's own listening activity — top artists/tracks, recently played, followed artists, and their own profile follower count. So this integration reflects **"what does this connected account listen to,"** not **"how is my audience engaging with my music."**
+
+### What's real vs. approximated vs. not applicable
+
+| `Analytics` field | Status |
+|---|---|
+| `followers` | **Real** — the connected account's own profile follower count (`GET /me`) |
+| `following` | **Real** — count of artists the account follows (`GET /me/following?type=artist`) |
+| `views` | **Approximated** — count of items in the last ≤50 recently-played tracks (`GET /me/player/recently-played`); Spotify does not expose full listening history via API, only this rolling window |
+| `watchTime` | **Approximated** — summed duration of that same recently-played window, in minutes |
+| `impressions`, `reach`, `profileVisits`, `likes`, `comments`, `shares`, `saves`, `posts` | **Always 0** — no Spotify equivalent exists for a personal account. Not fabricated; genuinely absent. |
+| Top content (`/api/charts/top-content`) | **Real** — top tracks via `GET /me/top/tracks`, title formatted as `"{track} — {artist}"` |
+| Token refresh | **Real** — Spotify Accounts Service token endpoint, triggered proactively when `tokenExpiresAt` is near |
+
+**Caveat on top content:** `TopContentResponse.views` holds Spotify's own 0–100 "popularity" score for Spotify tracks (there is no public per-track play-count endpoint), not a play count. It is **not** comparable in magnitude to a YouTube video's real view count — a Spotify track showing `80` sits next to a YouTube video showing `50000` in any cross-platform top-content comparison. This is intentional and documented rather than hidden, per the platform's explicit choice to reuse the existing field shape.
+
+### Access restrictions (as of Spotify's February 2026 developer platform changes)
+
+- The connecting Spotify account **must have Premium** — Development Mode (the default, no-approval tier) rejects free-tier accounts. This service checks `product` on the fetched profile and rejects non-Premium accounts with a clear `400` before ever attempting a sync.
+- Development Mode caps out at **5 authorized users per Client ID**. Scaling beyond that requires Spotify's "Extended Quota Mode," which itself requires being a registered business with a launched service and 250,000+ monthly active users.
+
+### Setting it up
+
+1. In the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard), create an app, check "Web API" under APIs/SDKs.
+2. Add a redirect URI matching `SPOTIFY_REDIRECT_URI` below (e.g. `http://localhost:8082/api/oauth/spotify/callback`).
+3. Set environment variables:
+
+```bash
+SPOTIFY_INTEGRATION_ENABLED=true
+SPOTIFY_CLIENT_ID=your-client-id
+SPOTIFY_CLIENT_SECRET=your-client-secret
+SPOTIFY_REDIRECT_URI=http://localhost:8082/api/oauth/spotify/callback
+SPOTIFY_FRONTEND_REDIRECT=http://localhost:3000/dashboard
+OAUTH_STATE_SECRET=some-long-random-production-secret
+```
+
+4. Frontend flow: call `GET /api/oauth/spotify/authorize` (authenticated) → redirect the browser to the returned `authorizationUrl` → after the user approves, Spotify redirects to the public `/api/oauth/spotify/callback` endpoint → the service exchanges the code (via HTTP Basic auth, unlike Google's form-body approach), fetches the profile, rejects non-Premium accounts, saves/updates the `SocialAccount`, runs an initial sync, and redirects the browser to `SPOTIFY_FRONTEND_REDIRECT`.
+
+`OAUTH_STATE_SECRET` is shared with the YouTube integration — set once, used by every platform's connect flow.
+
+---
+
 
 
 ### Prerequisites
@@ -224,6 +274,10 @@ The OAuth `state` parameter is HMAC-signed (`StateTokenService`) rather than rel
 | `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET` | — | Google OAuth 2.0 credentials |
 | `YOUTUBE_REDIRECT_URI` | http://localhost:8082/api/oauth/youtube/callback | Must match the Google Cloud Console redirect URI |
 | `YOUTUBE_FRONTEND_REDIRECT` | http://localhost:3000/dashboard | Where the browser lands after a successful connect |
+| `SPOTIFY_INTEGRATION_ENABLED` | false | Enable the real Spotify Web API / OAuth integration |
+| `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` | — | Spotify OAuth 2.0 credentials |
+| `SPOTIFY_REDIRECT_URI` | http://localhost:8082/api/oauth/spotify/callback | Must match the Spotify Developer Dashboard redirect URI |
+| `SPOTIFY_FRONTEND_REDIRECT` | http://localhost:3000/dashboard | Where the browser lands after a successful connect |
 | `OAUTH_STATE_SECRET` | dev-only-change-me-in-production | HMAC secret signing the OAuth `state` parameter for every platform's connect flow — **set a strong value in production** |
 
 ### Run Locally

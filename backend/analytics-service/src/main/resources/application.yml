@@ -66,6 +66,9 @@ feign:
       youtube-data-api:
         connectTimeout: 5000
         readTimeout: 10000
+      spotify-api:
+        connectTimeout: 5000
+        readTimeout: 10000
 
 # Application specific settings
 analytics:
@@ -90,6 +93,23 @@ youtube:
   token-uri: https://oauth2.googleapis.com/token
   api-base-url: https://www.googleapis.com/youtube/v3
   frontend-redirect-uri: ${YOUTUBE_FRONTEND_REDIRECT:http://localhost:3000/dashboard}
+
+# Real Spotify Web API / OAuth 2.0 integration.
+# Disabled by default — MockSocialMediaClient handles Spotify accounts
+# until real Spotify Developer Dashboard credentials are supplied and this
+# is switched on. See README.md for what this integration can and cannot
+# provide (no public API exists for artist streaming analytics — this
+# reflects the connected user's own listening activity instead).
+spotify:
+  enabled: ${SPOTIFY_INTEGRATION_ENABLED:false}
+  client-id: ${SPOTIFY_CLIENT_ID:}
+  client-secret: ${SPOTIFY_CLIENT_SECRET:}
+  redirect-uri: ${SPOTIFY_REDIRECT_URI:http://localhost:8082/api/oauth/spotify/callback}
+  scope: "user-read-email user-read-private user-top-read user-read-recently-played user-follow-read"
+  auth-uri: https://accounts.spotify.com/authorize
+  token-uri: https://accounts.spotify.com/api/token
+  api-base-url: https://api.spotify.com/v1
+  frontend-redirect-uri: ${SPOTIFY_FRONTEND_REDIRECT:http://localhost:3000/dashboard}
 
 jwt:
   header: Authorization
