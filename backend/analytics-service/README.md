@@ -312,6 +312,51 @@ Scaling past a handful of testers to real external users requires Meta **App Rev
 
 ---
 
+## Real TikTok Integration
+
+**TikTok** also has a real, OAuth-backed implementation — `TikTokSocialMediaClient` — using **TikTok Login Kit** (OAuth 2.0) and the **TikTok Display API**. Its token model matches YouTube's (a real, separate refresh token) rather than Instagram's single-token model.
+
+### Token model
+
+- Access token: 24-hour lifetime.
+- Refresh token: 365-day lifetime, exchanged at the same `POST /v2/oauth/token/` endpoint with `grant_type=refresh_token`.
+- TikTok may rotate the refresh token on every refresh call — per the official docs, "the returned `refresh_token` may be different than the one passed in the payload," so this service always re-stores whichever one comes back rather than assuming it's stable like Google's.
+
+### What's real vs. approximated vs. not applicable
+
+| `Analytics` field | Status |
+|---|---|
+| `followers`, `following`, `posts` | **Real** — via `GET /v2/user/info/` (`follower_count`, `following_count`, `video_count`) |
+| `likes` | **Real** — the profile's cumulative `likes_count`, the one account-level total TikTok's Display API does expose |
+| `views`, `comments`, `shares` | **Approximated** — TikTok has no account-level total for any of these, only per-video counts. This service sums `view_count`/`comment_count`/`share_count` across the most recent page of videos (up to 20) via `POST /v2/video/list/` — the same spirit as the Spotify integration's recently-played-window approximation |
+| `impressions`, `reach`, `profileVisits`, `watchTime`, `saves` | **Always 0** — no equivalent metric exists anywhere in the Display API, for any account type. Not fabricated; genuinely absent. |
+| Top content (`/api/charts/top-content`) | **Real** — per-video `view_count`, `like_count`, `comment_count`, `share_count`, `video_description`/`title`, `cover_image_url`, `share_url` |
+| Audience demographics (`/api/charts/audience-demographics`) | **Not applicable** — TikTok only exposes follower demographics via its separate Marketing/Ads ("TikTok for Business") API, which requires a business account and ad spend context, a fundamentally different developer program from Login Kit. `TikTokSocialMediaClient` does not implement `fetchAudienceDemographics`, so it correctly falls back to the interface's empty default — same as Spotify. |
+| Token refresh | **Real** — TikTok's OAuth token endpoint, triggered proactively when `tokenExpiresAt` is near |
+
+### Setting it up
+
+1. In the [TikTok for Developers portal](https://developers.tiktok.com/), create an app and add the **Login Kit** product.
+2. Request the `user.info.basic`, `user.info.profile`, `user.info.stats`, and `video.list` scopes under the app's Scopes settings (all Standard-tier, no special review needed for development).
+3. Add yourself (or other test users) as a registered tester in the app's settings — required for Standard/development-mode API access before App Review.
+4. Add a redirect URI matching `TIKTOK_REDIRECT_URI` below (e.g. `http://localhost:8082/api/oauth/tiktok/callback`).
+5. Set environment variables:
+
+```bash
+TIKTOK_INTEGRATION_ENABLED=true
+TIKTOK_CLIENT_KEY=your-tiktok-client-key
+TIKTOK_CLIENT_SECRET=your-tiktok-client-secret
+TIKTOK_REDIRECT_URI=http://localhost:8082/api/oauth/tiktok/callback
+TIKTOK_FRONTEND_REDIRECT=http://localhost:3000/dashboard
+OAUTH_STATE_SECRET=some-long-random-production-secret
+```
+
+6. Frontend flow: call `GET /api/oauth/tiktok/authorize` (authenticated) → redirect the browser to the returned `authorizationUrl` → after the user approves, TikTok redirects to the public `/api/oauth/tiktok/callback` endpoint → the service exchanges the code, fetches the profile, saves/updates the `SocialAccount`, runs an initial sync, and redirects the browser to `TIKTOK_FRONTEND_REDIRECT`.
+
+Scaling past a handful of testers to real external users requires TikTok **App Review** for the requested scopes — a standard TikTok platform requirement, not specific to this service.
+
+---
+
 
 
 ### Prerequisites
@@ -343,6 +388,10 @@ Scaling past a handful of testers to real external users requires Meta **App Rev
 | `INSTAGRAM_CLIENT_ID` / `INSTAGRAM_CLIENT_SECRET` | — | Meta app ID/secret ("Business Login for Instagram" product) |
 | `INSTAGRAM_REDIRECT_URI` | http://localhost:8082/api/oauth/instagram/callback | Must match the Meta app's configured redirect URI |
 | `INSTAGRAM_FRONTEND_REDIRECT` | http://localhost:3000/dashboard | Where the browser lands after a successful connect |
+| `TIKTOK_INTEGRATION_ENABLED` | false | Enable the real TikTok Display API / OAuth integration |
+| `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` | — | TikTok Login Kit client key/secret |
+| `TIKTOK_REDIRECT_URI` | http://localhost:8082/api/oauth/tiktok/callback | Must match the TikTok Developer app's configured redirect URI |
+| `TIKTOK_FRONTEND_REDIRECT` | http://localhost:3000/dashboard | Where the browser lands after a successful connect |
 | `OAUTH_STATE_SECRET` | dev-only-change-me-in-production | HMAC secret signing the OAuth `state` parameter for every platform's connect flow — **set a strong value in production** |
 
 ### Run Locally

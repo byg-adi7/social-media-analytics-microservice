@@ -72,6 +72,9 @@ feign:
       instagram-graph-api:
         connectTimeout: 5000
         readTimeout: 10000
+      tiktok-api:
+        connectTimeout: 5000
+        readTimeout: 10000
 
 # Application specific settings
 analytics:
@@ -130,6 +133,23 @@ instagram:
   short-lived-token-uri: https://api.instagram.com/oauth/access_token
   graph-base-url: https://graph.instagram.com
   frontend-redirect-uri: ${INSTAGRAM_FRONTEND_REDIRECT:http://localhost:3000/dashboard}
+
+# Real TikTok Display API / Login Kit OAuth 2.0 integration.
+# Disabled by default — MockSocialMediaClient handles TikTok accounts
+# until real TikTok Developer app credentials are supplied and this is
+# switched on. See README.md "Real TikTok Integration" for what this
+# integration can and cannot provide (no account-level view/comment/share
+# totals or audience demographics exist in the Display API).
+tiktok:
+  enabled: ${TIKTOK_INTEGRATION_ENABLED:false}
+  client-key: ${TIKTOK_CLIENT_KEY:}
+  client-secret: ${TIKTOK_CLIENT_SECRET:}
+  redirect-uri: ${TIKTOK_REDIRECT_URI:http://localhost:8082/api/oauth/tiktok/callback}
+  scope: "user.info.basic,user.info.profile,user.info.stats,video.list"
+  auth-uri: https://www.tiktok.com/v2/auth/authorize/
+  token-uri: https://open.tiktokapis.com/v2/oauth/token/
+  api-base-url: https://open.tiktokapis.com
+  frontend-redirect-uri: ${TIKTOK_FRONTEND_REDIRECT:http://localhost:3000/dashboard}
 
 jwt:
   header: Authorization
