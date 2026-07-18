@@ -357,6 +357,70 @@ Scaling past a handful of testers to real external users requires TikTok **App R
 
 ---
 
+## Real Facebook Integration
+
+**Facebook** also has a real, OAuth-backed implementation — `FacebookSocialMediaClient` — using **Facebook Login** and the **Graph API**'s Page endpoints. A connected account here is a **Facebook Page** (not the logging-in person), and its token model is a third, distinct shape from every other platform in this service.
+
+### Hard requirement: the connecting person must manage a Facebook Page
+
+This integration reads Page-level data, so the person completing OAuth must be an admin or editor of at least one Facebook Page. If they manage multiple Pages, only the first one returned by Facebook is connected — the same one-account-per-connect simplification used by the YouTube integration.
+
+### Token model — no refresh needed at all
+
+1. Authorization code → short-lived user access token (~1-2 hours)
+2. Short-lived → long-lived user access token (~60 days), via `GET /oauth/access_token?grant_type=fb_exchange_token`
+3. Long-lived user token → **Page access token**, via `GET /me/accounts`
+
+Per Meta's own docs, a Page access token obtained this way **does not expire** under normal conditions. So unlike YouTube/TikTok (refresh token pair) or Instagram (single refreshable token), this service does not proactively refresh anything for Facebook — it stores the Page token and uses it as-is. If Facebook ever invalidates it (the user revokes access, changes their password), calls simply start failing and the user has to reconnect; there's no silent recovery path, by design.
+
+### Metric deprecations this integration had to navigate
+
+Meta deprecated large batches of Page Insights metrics in 2025 (`page_fans`, `page_impressions`, and dozens of related `_unique` variants). This service was built directly against the *current* metric set, not the deprecated one:
+
+| Old (deprecated) | Used instead |
+|---|---|
+| `page_fans` | Page node's `followers_count` field |
+| `page_impressions` | `page_media_view` |
+| `page_impressions_unique` | `page_total_media_view_unique` |
+
+### What's real vs. approximated vs. not applicable
+
+| `Analytics` field | Status |
+|---|---|
+| `followers` | **Real** — Page node's `followers_count` |
+| `views` | **Real** — `page_media_view` (day) |
+| `reach` | **Real** — `page_total_media_view_unique` (day), the replacement for the deprecated unique-impressions metric |
+| `likes` | **Real** — summed `page_actions_post_reactions_total` (that day's reactions across all types) |
+| `comments`, `shares` | **Approximated** — no account-level total exists, only per-post counts, so this service sums them across the most recent page of posts, same approach as TikTok |
+| `impressions` | **Always 0** — the term itself was retired in favor of `page_media_view`, already reported under `views`; duplicating it would be misleading |
+| `profileVisits`, `watchTime`, `saves` | **Always 0** — no confirmed Facebook Page equivalent for any of these |
+| Top content (`/api/charts/top-content`) | **Real** — real per-post `post_media_view` view counts (one extra Graph API call per candidate post, capped at 15 candidates), plus real likes/comments/shares |
+| Audience demographics (`/api/charts/audience-demographics`) | **Partial** — city/country breakdowns are real (`page_follows_city`/`page_follows_country`); age/gender are **not available at all**, since Meta blocks Page audience age/gender data for any app connection made after March 14, 2024, which includes this integration regardless of when you enable it |
+| Token refresh | **Not applicable** — see token model above |
+
+### Setting it up
+
+1. In the [Meta for Developers portal](https://developers.facebook.com/), create an app and add the **Facebook Login** product.
+2. Request the `pages_show_list`, `pages_read_engagement`, `pages_read_user_content`, and `read_insights` permissions under the app's Permissions settings (Standard Access; `read_insights` requires the first two as dependencies).
+3. Add yourself (or other testers) as an app admin/editor, and make sure that person is also an admin of at least one real Facebook Page — required for Standard/development-mode access before App Review.
+4. Add a redirect URI matching `FACEBOOK_REDIRECT_URI` below (e.g. `http://localhost:8082/api/oauth/facebook/callback`).
+5. Set environment variables:
+
+```bash
+FACEBOOK_INTEGRATION_ENABLED=true
+FACEBOOK_APP_ID=your-facebook-app-id
+FACEBOOK_APP_SECRET=your-facebook-app-secret
+FACEBOOK_REDIRECT_URI=http://localhost:8082/api/oauth/facebook/callback
+FACEBOOK_FRONTEND_REDIRECT=http://localhost:3000/dashboard
+OAUTH_STATE_SECRET=some-long-random-production-secret
+```
+
+6. Frontend flow: call `GET /api/oauth/facebook/authorize` (authenticated) → redirect the browser to the returned `authorizationUrl` → after the user approves, Facebook redirects to the public `/api/oauth/facebook/callback` endpoint → the service exchanges the code, walks the user-token-to-Page-token exchange, fetches the Page's identity, saves/updates the `SocialAccount`, runs an initial sync, and redirects the browser to `FACEBOOK_FRONTEND_REDIRECT`.
+
+Scaling past a handful of testers to real external users requires Meta **App Review** for the requested permissions — a standard Meta platform requirement, not specific to this service.
+
+---
+
 
 
 ### Prerequisites
@@ -392,6 +456,10 @@ Scaling past a handful of testers to real external users requires TikTok **App R
 | `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` | — | TikTok Login Kit client key/secret |
 | `TIKTOK_REDIRECT_URI` | http://localhost:8082/api/oauth/tiktok/callback | Must match the TikTok Developer app's configured redirect URI |
 | `TIKTOK_FRONTEND_REDIRECT` | http://localhost:3000/dashboard | Where the browser lands after a successful connect |
+| `FACEBOOK_INTEGRATION_ENABLED` | false | Enable the real Facebook Graph API / OAuth integration |
+| `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` | — | Meta app ID/secret (Facebook Login product) |
+| `FACEBOOK_REDIRECT_URI` | http://localhost:8082/api/oauth/facebook/callback | Must match the Meta app's configured redirect URI |
+| `FACEBOOK_FRONTEND_REDIRECT` | http://localhost:3000/dashboard | Where the browser lands after a successful connect |
 | `OAUTH_STATE_SECRET` | dev-only-change-me-in-production | HMAC secret signing the OAuth `state` parameter for every platform's connect flow — **set a strong value in production** |
 
 ### Run Locally

@@ -43,6 +43,11 @@ tiktok:
   redirect-uri: http://localhost:8082/api/oauth/tiktok/callback
   frontend-redirect-uri: http://localhost:3000/dashboard
 
+facebook:
+  enabled: false
+  redirect-uri: http://localhost:8082/api/oauth/facebook/callback
+  frontend-redirect-uri: http://localhost:3000/dashboard
+
 oauth:
   state-secret: test-secret
 

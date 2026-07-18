@@ -75,6 +75,9 @@ feign:
       tiktok-api:
         connectTimeout: 5000
         readTimeout: 10000
+      facebook-graph-api:
+        connectTimeout: 5000
+        readTimeout: 10000
 
 # Application specific settings
 analytics:
@@ -150,6 +153,21 @@ tiktok:
   token-uri: https://open.tiktokapis.com/v2/oauth/token/
   api-base-url: https://open.tiktokapis.com
   frontend-redirect-uri: ${TIKTOK_FRONTEND_REDIRECT:http://localhost:3000/dashboard}
+
+# Real Facebook Graph API / Facebook Login integration (Page-scoped).
+# Disabled by default — MockSocialMediaClient handles Facebook accounts
+# until real Meta Developer app credentials are supplied and this is
+# switched on. See README.md "Real Facebook Integration" — the connecting
+# person must be an admin/editor of at least one Facebook Page.
+facebook:
+  enabled: ${FACEBOOK_INTEGRATION_ENABLED:false}
+  app-id: ${FACEBOOK_APP_ID:}
+  app-secret: ${FACEBOOK_APP_SECRET:}
+  redirect-uri: ${FACEBOOK_REDIRECT_URI:http://localhost:8082/api/oauth/facebook/callback}
+  scope: "pages_show_list,pages_read_engagement,pages_read_user_content,read_insights"
+  auth-uri: https://www.facebook.com/v25.0/dialog/oauth
+  graph-base-url: https://graph.facebook.com/v25.0
+  frontend-redirect-uri: ${FACEBOOK_FRONTEND_REDIRECT:http://localhost:3000/dashboard}
 
 jwt:
   header: Authorization

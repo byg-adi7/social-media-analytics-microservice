@@ -42,7 +42,8 @@ public class SecurityConfig {
             "/api/oauth/youtube/callback",
             "/api/oauth/spotify/callback",
             "/api/oauth/instagram/callback",
-            "/api/oauth/tiktok/callback"
+            "/api/oauth/tiktok/callback",
+            "/api/oauth/facebook/callback"
     };
 
     @Bean
