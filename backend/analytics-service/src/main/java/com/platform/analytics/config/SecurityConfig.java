@@ -35,12 +35,13 @@ public class SecurityConfig {
             "/v3/api-docs/**",
             "/swagger-ui.html",
             "/actuator/health/**",
-            // Google/Spotify redirect the user's raw browser here after
-            // consent — no Authorization header is (or can be) attached to
-            // that request. The user is instead verified via the signed
-            // 'state' parameter in StateTokenService.
+            // Google/Spotify/Instagram redirect the user's raw browser here
+            // after consent — no Authorization header is (or can be)
+            // attached to that request. The user is instead verified via
+            // the signed 'state' parameter in StateTokenService.
             "/api/oauth/youtube/callback",
-            "/api/oauth/spotify/callback"
+            "/api/oauth/spotify/callback",
+            "/api/oauth/instagram/callback"
     };
 
     @Bean

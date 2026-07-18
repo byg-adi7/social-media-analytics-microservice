@@ -116,6 +116,7 @@ All accept optional `startDate`, `endDate` (ISO `yyyy-MM-dd`) and `platform` que
 | GET | `/api/charts/platform-comparison` | Bar chart |
 | GET | `/api/charts/engagement-distribution` | Pie chart |
 | GET | `/api/charts/top-content` | Table / cards |
+| GET | `/api/charts/audience-demographics` | Age/gender/city/country breakdowns (platforms that support it) |
 | GET | `/api/charts/weekly-growth` | Line chart (daily deltas, 7 days) |
 | GET | `/api/charts/monthly-growth` | Line chart (monthly deltas, 6 months) |
 
@@ -251,6 +252,66 @@ OAUTH_STATE_SECRET=some-long-random-production-secret
 
 ---
 
+## Real Instagram Integration
+
+**Instagram** also has a real, OAuth-backed implementation — `InstagramSocialMediaClient` — using Meta's **Instagram Graph API** via the **"Business Login for Instagram"** flow (`instagram.com/oauth/authorize`, not the older Facebook Login for Business flow). This flow does **not** require the account to be linked to a Facebook Page.
+
+### Hard requirement: Business or Creator account only
+
+The Instagram Graph API only works with Instagram **Business or Creator** professional accounts — personal accounts are not supported and there is no workaround. The account must be converted (free, in the Instagram app settings) before it can be connected here.
+
+### The token model is different from YouTube/Spotify
+
+Instagram has **no separate refresh token**. Instead:
+
+1. Authorization code → short-lived access token (~1 hour, `POST api.instagram.com/oauth/access_token`)
+2. Short-lived token → long-lived access token (~60 days, `GET graph.instagram.com/access_token?grant_type=ig_exchange_token`)
+3. The long-lived access token is refreshed **in place** (`GET graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token`), valid any time between 24 hours after issuance and its expiry.
+
+`resolveFreshAccessToken` refreshes proactively (7-day buffer before expiry) by calling step 3 directly on the stored access token — there is no `refreshToken` column populated for Instagram accounts.
+
+### What's real vs. approximated vs. not applicable
+
+| `Analytics` field | Status |
+|---|---|
+| `followers`, `following`, `posts` | **Real** — via the IG User node (`followers_count`, `follows_count`, `media_count`) |
+| `reach`, `views`, `likes`, `comments`, `shares`, `saves` | **Real** — account-level insights, `period=day`, `metric_type=total_value` |
+| `impressions` | **Always 0** — deprecated by Meta for media created after July 2, 2024, no replacement metric |
+| `profileVisits` | **Always 0** — `profile_views` metric fully deprecated as of April 21, 2025 |
+| `watchTime` | **Always 0** — no equivalent account-level metric exists |
+| Top content (`/api/charts/top-content`) | **Real** — per-media `like_count`, `comments_count`, `view_count`, `shares_count`, `caption`, `permalink`, `thumbnail_url` |
+| Audience demographics (`/api/charts/audience-demographics`) | **Real** — follower age/gender/city/country breakdowns via `follower_demographics` insights |
+| Token refresh | **Real** — see token model above |
+
+### Audience demographics caveats
+
+- Requires a `timeframe` param, not `period` — only `this_month` and `this_week` are currently valid (older windows like `last_30_days` were deprecated in API v20.0+). This service uses `this_month`.
+- Each `breakdown` dimension (`age`, `gender`, `city`, `country`) requires its own API call — Meta does not support combined dimensions in one request. `fetchAudienceDemographics` makes 4 calls per account.
+- Meta enforces minimums: **100+ followers** for `follower_demographics`. Accounts below that return an error, which this service catches and logs — the account is simply omitted from the demographics chart rather than failing the whole request.
+
+### Setting it up
+
+1. In [Meta for Developers](https://developers.facebook.com/), create an app and add the **"Instagram"** product with the **"Business Login for Instagram"** flow (not "Facebook Login for Business").
+2. Convert the Instagram account you want to connect to a **Business or Creator** account (Instagram app → Settings → Account type).
+3. Add yourself (or other test accounts) as an **Instagram tester** under the app's Instagram product settings, and accept the tester invite from the Instagram app — required for Standard (development-mode) API access before App Review.
+4. Add a redirect URI matching `INSTAGRAM_REDIRECT_URI` below (e.g. `http://localhost:8082/api/oauth/instagram/callback`).
+5. Set environment variables:
+
+```bash
+INSTAGRAM_INTEGRATION_ENABLED=true
+INSTAGRAM_CLIENT_ID=your-instagram-app-id
+INSTAGRAM_CLIENT_SECRET=your-instagram-app-secret
+INSTAGRAM_REDIRECT_URI=http://localhost:8082/api/oauth/instagram/callback
+INSTAGRAM_FRONTEND_REDIRECT=http://localhost:3000/dashboard
+OAUTH_STATE_SECRET=some-long-random-production-secret
+```
+
+6. Frontend flow: call `GET /api/oauth/instagram/authorize` (authenticated) → redirect the browser to the returned `authorizationUrl` → after the user approves, Instagram redirects to the public `/api/oauth/instagram/callback` endpoint → the service exchanges the code, walks the short-lived → long-lived token exchange, fetches the profile, saves/updates the `SocialAccount`, runs an initial sync, and redirects the browser to `INSTAGRAM_FRONTEND_REDIRECT`.
+
+Scaling past a handful of testers to real external users requires Meta **App Review** (for the `instagram_business_basic` / `instagram_business_manage_insights` scopes) plus **Business Verification** — standard Meta platform requirements, not specific to this service.
+
+---
+
 
 
 ### Prerequisites
@@ -278,6 +339,10 @@ OAUTH_STATE_SECRET=some-long-random-production-secret
 | `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` | — | Spotify OAuth 2.0 credentials |
 | `SPOTIFY_REDIRECT_URI` | http://localhost:8082/api/oauth/spotify/callback | Must match the Spotify Developer Dashboard redirect URI |
 | `SPOTIFY_FRONTEND_REDIRECT` | http://localhost:3000/dashboard | Where the browser lands after a successful connect |
+| `INSTAGRAM_INTEGRATION_ENABLED` | false | Enable the real Instagram Graph API / OAuth integration |
+| `INSTAGRAM_CLIENT_ID` / `INSTAGRAM_CLIENT_SECRET` | — | Meta app ID/secret ("Business Login for Instagram" product) |
+| `INSTAGRAM_REDIRECT_URI` | http://localhost:8082/api/oauth/instagram/callback | Must match the Meta app's configured redirect URI |
+| `INSTAGRAM_FRONTEND_REDIRECT` | http://localhost:3000/dashboard | Where the browser lands after a successful connect |
 | `OAUTH_STATE_SECRET` | dev-only-change-me-in-production | HMAC secret signing the OAuth `state` parameter for every platform's connect flow — **set a strong value in production** |
 
 ### Run Locally

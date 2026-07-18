@@ -1,11 +1,13 @@
 package com.platform.analytics.client;
 
 import com.platform.analytics.constant.Platform;
+import com.platform.analytics.dto.response.AudienceDemographicsResponse;
 import com.platform.analytics.dto.response.TopContentResponse;
 import com.platform.analytics.entity.SocialAccount;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Abstraction over an external social media platform's API.
@@ -33,6 +35,17 @@ public interface SocialMediaClient {
      * Fetches the top-performing content/posts for the given account.
      */
     List<TopContentResponse> fetchTopContent(SocialAccount account, int limit);
+
+    /**
+     * Fetches audience demographic breakdowns (age/gender/city/country) for
+     * the given account, if the platform and this client implementation
+     * support it. Defaults to {@link Optional#empty()} so platforms without
+     * a demographics concept (e.g. Spotify's personal-listening data) or
+     * clients that haven't implemented it need no changes here.
+     */
+    default Optional<AudienceDemographicsResponse> fetchAudienceDemographics(SocialAccount account) {
+        return Optional.empty();
+    }
 
     /**
      * Plain data carrier for a day's raw metrics pulled from (or simulated

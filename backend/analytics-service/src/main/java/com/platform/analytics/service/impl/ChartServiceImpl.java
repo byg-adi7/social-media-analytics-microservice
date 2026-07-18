@@ -102,6 +102,24 @@ public class ChartServiceImpl implements ChartService {
     }
 
     @Override
+    public List<AudienceDemographicsResponse> getAudienceDemographicsChart(UUID userId) {
+        List<SocialAccount> accounts = aggregationHelper.getActiveAccounts(userId);
+
+        List<AudienceDemographicsResponse> result = new ArrayList<>();
+        for (SocialAccount account : accounts) {
+            try {
+                SocialMediaClient client = socialMediaClientResolver.resolve(account.getPlatform());
+                client.fetchAudienceDemographics(account).ifPresent(result::add);
+            } catch (com.platform.analytics.exception.ApiException ex) {
+                log.warn("Skipping audience demographics for account={} platform={}: {}",
+                        account.getId(), account.getPlatform(), ex.getMessage());
+            }
+        }
+
+        return result;
+    }
+
+    @Override
     public GrowthChartResponse getWeeklyGrowthChart(UUID userId) {
         LocalDate end = LocalDate.now();
         LocalDate start = end.minusDays(6);

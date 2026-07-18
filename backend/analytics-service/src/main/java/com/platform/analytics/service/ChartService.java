@@ -25,6 +25,8 @@ public interface ChartService {
 
     List<TopContentResponse> getTopContentChart(UUID userId, int limit);
 
+    List<AudienceDemographicsResponse> getAudienceDemographicsChart(UUID userId);
+
     GrowthChartResponse getWeeklyGrowthChart(UUID userId);
 
     GrowthChartResponse getMonthlyGrowthChart(UUID userId);

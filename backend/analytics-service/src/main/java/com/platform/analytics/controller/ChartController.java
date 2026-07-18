@@ -85,6 +85,14 @@ public class ChartController {
         return chartService.getTopContentChart(userId, limit);
     }
 
+    @GetMapping("/audience-demographics")
+    @Operation(summary = "Follower age/gender/city/country breakdowns, for platforms that support it")
+    public List<AudienceDemographicsResponse> getAudienceDemographicsChart() {
+        log.info("Incoming request: get audience demographics chart");
+        UUID userId = SecurityContextUtil.getCurrentUserId();
+        return chartService.getAudienceDemographicsChart(userId);
+    }
+
     @GetMapping("/weekly-growth")
     @Operation(summary = "Daily follower growth over the last 7 days")
     public GrowthChartResponse getWeeklyGrowthChart() {

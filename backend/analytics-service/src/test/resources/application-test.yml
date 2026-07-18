@@ -33,6 +33,11 @@ spotify:
   redirect-uri: http://localhost:8082/api/oauth/spotify/callback
   frontend-redirect-uri: http://localhost:3000/dashboard
 
+instagram:
+  enabled: false
+  redirect-uri: http://localhost:8082/api/oauth/instagram/callback
+  frontend-redirect-uri: http://localhost:3000/dashboard
+
 oauth:
   state-secret: test-secret
 
