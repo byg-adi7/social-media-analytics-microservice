@@ -3,6 +3,7 @@ package com.audienceinsights.audience_insights_auth_service.Service;
 import com.audienceinsights.audience_insights_auth_service.Config.JwtUtil;
 import com.audienceinsights.audience_insights_auth_service.Dto.AuthResponse;
 import com.audienceinsights.audience_insights_auth_service.Dto.LoginRequest;
+import com.audienceinsights.audience_insights_auth_service.Dto.TokenValidationResponse;
 import com.audienceinsights.audience_insights_auth_service.Dto.UserRequest;
 import com.audienceinsights.audience_insights_auth_service.Entity.User;
 import com.audienceinsights.audience_insights_auth_service.Repository.UserRepository;
@@ -35,7 +36,7 @@ public class AuthService {
 
         userRepository.save(user);
 
-        String token = jwtUtil.generateToken(user.getEmail());
+        String token = jwtUtil.generateToken(user.getId(), user.getEmail(), user.getRole());
 
         return AuthResponse.builder()
                 .token(token)
@@ -53,13 +54,32 @@ public class AuthService {
             throw new RuntimeException("Invalid email or password");
         }
 
-        String token = jwtUtil.generateToken(user.getEmail());
+        String token = jwtUtil.generateToken(user.getId(), user.getEmail(), user.getRole());
 
         return AuthResponse.builder()
                 .token(token)
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .role(user.getRole())
+                .build();
+    }
+
+    /**
+     * Validates a raw JWT (without the "Bearer " prefix) and returns the
+     * claims embedded at generation time. Called by the Analytics Service
+     * (and any other downstream service) on every authenticated request,
+     * since authentication is centralized here.
+     */
+    public TokenValidationResponse validate(String token) {
+        if (!jwtUtil.isTokenValid(token)) {
+            return TokenValidationResponse.builder().valid(false).build();
+        }
+
+        return TokenValidationResponse.builder()
+                .valid(true)
+                .userId(jwtUtil.extractUserId(token))
+                .email(jwtUtil.extractEmail(token))
+                .role(jwtUtil.extractRole(token))
                 .build();
     }
 }
