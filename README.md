@@ -1,8 +1,12 @@
-# Audience Insights Platform
+# Social Media Analytics Microservice
 
 A microservices platform for connecting social media accounts (YouTube,
 Instagram, TikTok, Facebook, Spotify), syncing their analytics, and
 surfacing dashboards, reports, and notifications.
+
+**Author:** [Adi Ransford](https://github.com/byg-adi7)
+
+**License:** [MIT](LICENSE)
 
 ## Services
 
