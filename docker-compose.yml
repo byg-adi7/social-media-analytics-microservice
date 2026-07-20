@@ -11,7 +11,12 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      # database/schema.sql is no longer mounted here: both auth-service and
+      # analytics-service manage their own tables via Hibernate
+      # (spring.jpa.hibernate.ddl-auto=update) from their JPA entities, which
+      # have diverged from that static seed script (UUID PKs, richer
+      # per-platform OAuth columns). Kept in the repo for historical
+      # reference only - see database/schema.sql's header comment.
     networks:
       - audienceinsights-network
     healthcheck:
@@ -47,30 +52,19 @@ services:
       SPRING_DATASOURCE_USERNAME: audience
       SPRING_DATASOURCE_PASSWORD: insight123
       SERVER_PORT: 8002
+      AUTH_SERVICE_URL: http://auth-service:8001
     ports:
       - "8002:8002"
     depends_on:
       postgres:
         condition: service_healthy
+      auth-service:
+        condition: service_started
     networks:
       - audienceinsights-network
-  notification-service:
-    build:
-      context: ./backend/notification-service
-      dockerfile: Dockerfile
-    container_name: notification-service
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/audienceinsights
-      SPRING_DATASOURCE_USERNAME: audience
-      SPRING_DATASOURCE_PASSWORD: insight123
-      SERVER_PORT: 8003
-    ports:
-      - "8003:8003"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - audienceinsights-network
+  # notification-service: referenced by nginx.conf/schema.sql but not yet
+  # implemented on any branch - intentionally omitted so the stack actually
+  # starts. See the integration report for this known gap.
   api-gateway:
     image: nginx:alpine
     container_name: api-gateway
@@ -81,7 +75,6 @@ services:
     depends_on:
       - auth-service
       - analytics-service
-      - notification-service
     networks:
       - audienceinsights-network
 networks:
