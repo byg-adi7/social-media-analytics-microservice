@@ -1,0 +1,57 @@
+version: "3.8"
+
+services:
+  analytics-db:
+    image: postgres:16-alpine
+    container_name: analytics-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: analytics_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - analytics_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  analytics-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: analytics-service
+    restart: unless-stopped
+    depends_on:
+      analytics-db:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8082
+      DB_HOST: analytics-db
+      DB_PORT: 5432
+      DB_NAME: analytics_db
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DDL_AUTO: update
+      SHOW_SQL: "false"
+      AUTH_SERVICE_URL: http://auth-service:8081
+      SYNC_ENABLED: "true"
+      SYNC_CRON: "0 0 * * * *"
+      MOCK_DATA_ENABLED: "true"
+    ports:
+      - "8082:8082"
+    networks:
+      - platform-network
+
+networks:
+  platform-network:
+    external: true
+    # Create this network once via: docker network create platform-network
+    # so the Analytics Service can reach other microservices (e.g. auth-service)
+    # by container name in the broader Audience Insights Platform.
+
+volumes:
+  analytics_db_data:

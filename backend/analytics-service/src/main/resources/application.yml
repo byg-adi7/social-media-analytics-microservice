@@ -1,0 +1,199 @@
+server:
+  port: ${SERVER_PORT:8082}
+  error:
+    include-message: always
+    include-binding-errors: always
+
+spring:
+  application:
+    name: analytics-service
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:analytics_db}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      idle-timeout: 30000
+      connection-timeout: 20000
+      max-lifetime: 1200000
+
+  jpa:
+    hibernate:
+      ddl-auto: ${DDL_AUTO:update}
+    show-sql: ${SHOW_SQL:false}
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: UTC
+    open-in-view: false
+
+  jackson:
+    default-property-inclusion: non_null
+    time-zone: UTC
+    serialization:
+      write-dates-as-timestamps: false
+
+# Auth Service integration (JWT validation via Feign, no local authentication)
+auth-service:
+  url: ${AUTH_SERVICE_URL:http://localhost:8081}
+  validate-token-path: /api/auth/validate
+
+# CORS allow-list for the frontend origin(s). Comma-separated for multiple
+# environments/domains, e.g. "https://app.example.com,https://staging.example.com".
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+
+# Shared OAuth settings used by every platform's connect flow (not specific
+# to any one platform's own client-id/secret/scopes, which live under that
+# platform's own config block, e.g. youtube.*).
+oauth:
+  state-secret: ${OAUTH_STATE_SECRET:dev-only-change-me-in-production}
+
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: 5000
+        readTimeout: 10000
+      auth-service:
+        connectTimeout: 3000
+        readTimeout: 5000
+      youtube-data-api:
+        connectTimeout: 5000
+        readTimeout: 10000
+      spotify-api:
+        connectTimeout: 5000
+        readTimeout: 10000
+      instagram-graph-api:
+        connectTimeout: 5000
+        readTimeout: 10000
+      tiktok-api:
+        connectTimeout: 5000
+        readTimeout: 10000
+      facebook-graph-api:
+        connectTimeout: 5000
+        readTimeout: 10000
+
+# Application specific settings
+analytics:
+  sync:
+    cron: ${SYNC_CRON:0 0 * * * *} # every hour
+    enabled: ${SYNC_ENABLED:true}
+  supported-platforms: YOUTUBE,INSTAGRAM,TIKTOK,FACEBOOK,SPOTIFY
+  mock-data:
+    enabled: ${MOCK_DATA_ENABLED:true}
+
+# Real YouTube Data API v3 / Google OAuth 2.0 integration.
+# Disabled by default — MockSocialMediaClient handles YouTube accounts
+# until real Google Cloud OAuth credentials are supplied and this is
+# switched on. See README.md "Enabling the real YouTube integration".
+youtube:
+  enabled: ${YOUTUBE_INTEGRATION_ENABLED:false}
+  client-id: ${YOUTUBE_CLIENT_ID:}
+  client-secret: ${YOUTUBE_CLIENT_SECRET:}
+  redirect-uri: ${YOUTUBE_REDIRECT_URI:http://localhost:8082/api/oauth/youtube/callback}
+  scope: https://www.googleapis.com/auth/youtube.readonly
+  auth-uri: https://accounts.google.com/o/oauth2/v2/auth
+  token-uri: https://oauth2.googleapis.com/token
+  api-base-url: https://www.googleapis.com/youtube/v3
+  frontend-redirect-uri: ${YOUTUBE_FRONTEND_REDIRECT:http://localhost:3000/dashboard}
+
+# Real Spotify Web API / OAuth 2.0 integration.
+# Disabled by default — MockSocialMediaClient handles Spotify accounts
+# until real Spotify Developer Dashboard credentials are supplied and this
+# is switched on. See README.md for what this integration can and cannot
+# provide (no public API exists for artist streaming analytics — this
+# reflects the connected user's own listening activity instead).
+spotify:
+  enabled: ${SPOTIFY_INTEGRATION_ENABLED:false}
+  client-id: ${SPOTIFY_CLIENT_ID:}
+  client-secret: ${SPOTIFY_CLIENT_SECRET:}
+  redirect-uri: ${SPOTIFY_REDIRECT_URI:http://localhost:8082/api/oauth/spotify/callback}
+  scope: "user-read-email user-read-private user-top-read user-read-recently-played user-follow-read"
+  auth-uri: https://accounts.spotify.com/authorize
+  token-uri: https://accounts.spotify.com/api/token
+  api-base-url: https://api.spotify.com/v1
+  frontend-redirect-uri: ${SPOTIFY_FRONTEND_REDIRECT:http://localhost:3000/dashboard}
+
+# Real Instagram Graph API / "Business Login for Instagram" OAuth 2.0
+# integration. Disabled by default — MockSocialMediaClient handles
+# Instagram accounts until real Meta Developer App credentials are supplied
+# and this is switched on. Requires the connected account to be an
+# Instagram Business or Creator professional account (personal accounts are
+# not supported by this API). See README.md "Real Instagram Integration".
+instagram:
+  enabled: ${INSTAGRAM_INTEGRATION_ENABLED:false}
+  client-id: ${INSTAGRAM_CLIENT_ID:}
+  client-secret: ${INSTAGRAM_CLIENT_SECRET:}
+  redirect-uri: ${INSTAGRAM_REDIRECT_URI:http://localhost:8082/api/oauth/instagram/callback}
+  scope: "instagram_business_basic instagram_business_manage_insights"
+  auth-uri: https://www.instagram.com/oauth/authorize
+  short-lived-token-uri: https://api.instagram.com/oauth/access_token
+  graph-base-url: https://graph.instagram.com
+  frontend-redirect-uri: ${INSTAGRAM_FRONTEND_REDIRECT:http://localhost:3000/dashboard}
+
+# Real TikTok Display API / Login Kit OAuth 2.0 integration.
+# Disabled by default — MockSocialMediaClient handles TikTok accounts
+# until real TikTok Developer app credentials are supplied and this is
+# switched on. See README.md "Real TikTok Integration" for what this
+# integration can and cannot provide (no account-level view/comment/share
+# totals or audience demographics exist in the Display API).
+tiktok:
+  enabled: ${TIKTOK_INTEGRATION_ENABLED:false}
+  client-key: ${TIKTOK_CLIENT_KEY:}
+  client-secret: ${TIKTOK_CLIENT_SECRET:}
+  redirect-uri: ${TIKTOK_REDIRECT_URI:http://localhost:8082/api/oauth/tiktok/callback}
+  scope: "user.info.basic,user.info.profile,user.info.stats,video.list"
+  auth-uri: https://www.tiktok.com/v2/auth/authorize/
+  token-uri: https://open.tiktokapis.com/v2/oauth/token/
+  api-base-url: https://open.tiktokapis.com
+  frontend-redirect-uri: ${TIKTOK_FRONTEND_REDIRECT:http://localhost:3000/dashboard}
+
+# Real Facebook Graph API / Facebook Login integration (Page-scoped).
+# Disabled by default — MockSocialMediaClient handles Facebook accounts
+# until real Meta Developer app credentials are supplied and this is
+# switched on. See README.md "Real Facebook Integration" — the connecting
+# person must be an admin/editor of at least one Facebook Page.
+facebook:
+  enabled: ${FACEBOOK_INTEGRATION_ENABLED:false}
+  app-id: ${FACEBOOK_APP_ID:}
+  app-secret: ${FACEBOOK_APP_SECRET:}
+  redirect-uri: ${FACEBOOK_REDIRECT_URI:http://localhost:8082/api/oauth/facebook/callback}
+  scope: "pages_show_list,pages_read_engagement,pages_read_user_content,read_insights"
+  auth-uri: https://www.facebook.com/v25.0/dialog/oauth
+  graph-base-url: https://graph.facebook.com/v25.0
+  frontend-redirect-uri: ${FACEBOOK_FRONTEND_REDIRECT:http://localhost:3000/dashboard}
+
+jwt:
+  header: Authorization
+  prefix: "Bearer "
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
+
+logging:
+  level:
+    root: INFO
+    com.platform.analytics: DEBUG
+    org.hibernate.SQL: ${SHOW_SQL:false}
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
