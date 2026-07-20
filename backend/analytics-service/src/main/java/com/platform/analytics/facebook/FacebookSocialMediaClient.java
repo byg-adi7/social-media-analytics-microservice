@@ -85,7 +85,6 @@ public class FacebookSocialMediaClient implements SocialMediaClient {
     private static final int RECENT_POSTS_LIMIT = 20;
     private static final int TOP_CONTENT_CANDIDATE_LIMIT = 15;
 
-    private static final String FOLLOWS_METRIC = "page_follows";
     private static final String VIEWS_METRIC = "page_media_view";
     private static final String REACH_METRIC = "page_total_media_view_unique";
     private static final String REACTIONS_METRIC = "page_actions_post_reactions_total";
@@ -93,6 +92,7 @@ public class FacebookSocialMediaClient implements SocialMediaClient {
     private static final String COUNTRY_METRIC = "page_follows_country";
     private static final String POST_VIEWS_METRIC = "post_media_view";
     private static final String DAY_PERIOD = "day";
+    private static final String LIFETIME_PERIOD = "lifetime";
 
     private static final DateTimeFormatter CREATED_TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ");
 
@@ -111,10 +111,10 @@ public class FacebookSocialMediaClient implements SocialMediaClient {
         FacebookPageResponse page = fetchPage(pageId, accessToken, account);
         long followers = page.followersCount() != null ? page.followersCount() : orZero(page.fanCount());
 
-        long views = fetchScalarMetric(pageId, VIEWS_METRIC, accessToken, account);
-        long reach = fetchScalarMetric(pageId, REACH_METRIC, accessToken, account);
+        long views = fetchScalarMetric(pageId, VIEWS_METRIC, date, accessToken, account);
+        long reach = fetchScalarMetric(pageId, REACH_METRIC, date, accessToken, account);
 
-        Map<String, Long> reactions = fetchBreakdownMetric(pageId, REACTIONS_METRIC, accessToken, account);
+        Map<String, Long> reactions = fetchBreakdownMetric(pageId, REACTIONS_METRIC, date, accessToken, account);
         long totalLikes = reactions.values().stream().mapToLong(Long::longValue).sum();
 
         List<FacebookPostsResponse.Post> recentPosts = fetchRecentPosts(pageId, accessToken, RECENT_POSTS_LIMIT, account);
@@ -169,8 +169,11 @@ public class FacebookSocialMediaClient implements SocialMediaClient {
         String accessToken = resolveAccessToken(account);
 
         try {
-            Map<String, Long> byCity = fetchBreakdownMetricOrEmpty(pageId, CITY_METRIC, accessToken, account);
-            Map<String, Long> byCountry = fetchBreakdownMetricOrEmpty(pageId, COUNTRY_METRIC, accessToken, account);
+            // Not tied to a specific sync date - reports the current
+            // breakdown as of today.
+            LocalDate today = LocalDate.now();
+            Map<String, Long> byCity = fetchBreakdownMetricOrEmpty(pageId, CITY_METRIC, today, accessToken, account);
+            Map<String, Long> byCountry = fetchBreakdownMetricOrEmpty(pageId, COUNTRY_METRIC, today, accessToken, account);
 
             return Optional.of(AudienceDemographicsResponse.builder()
                     .platform(Platform.FACEBOOK)
@@ -185,7 +188,8 @@ public class FacebookSocialMediaClient implements SocialMediaClient {
                     .byCountry(byCountry)
                     .build());
         } catch (Exception ex) {
-            log.warn("Failed to fetch Facebook audience demographics for account={}: {}", account.getId(), ex.getMessage());
+            log.warn("Failed to fetch Facebook audience demographics for account={}: {}",
+                    account.getId(), ex.getClass().getSimpleName());
             return Optional.empty();
         }
     }
@@ -216,53 +220,50 @@ public class FacebookSocialMediaClient implements SocialMediaClient {
         try {
             return facebookApiClient.getPage(pageId, PAGE_FIELDS, accessToken);
         } catch (FeignException ex) {
-            log.error("Facebook Graph API call failed while fetching Page for account={}: {}", account.getId(), ex.getMessage());
+            log.error("Facebook Graph API call failed while fetching Page for account={}: HTTP {}", account.getId(), ex.status());
             throw new ExternalApiException("Failed to fetch Page data from Facebook for account " + account.getId(), ex);
         }
     }
 
-    private long fetchScalarMetric(String pageId, String metric, String accessToken, SocialAccount account) {
+    private long fetchScalarMetric(String pageId, String metric, LocalDate date, String accessToken, SocialAccount account) {
         try {
-            FacebookInsightsResponse response = facebookApiClient.getPageInsights(pageId, metric, DAY_PERIOD, accessToken);
+            FacebookInsightsResponse response = facebookApiClient.getPageInsights(
+                    pageId, metric, DAY_PERIOD, date.toString(), date.plusDays(1).toString(), accessToken);
             if (response == null || response.data() == null || response.data().isEmpty()) {
                 return 0L;
             }
             List<FacebookInsightsResponse.ValueEntry> values = response.data().get(0).values();
-            if (values == null || values.isEmpty()) {
-                return 0L;
-            }
-            return orZero(values.get(values.size() - 1).value());
+            FacebookInsightsResponse.ValueEntry selected = selectValueForDate(values, date, FacebookInsightsResponse.ValueEntry::endTime);
+            return selected != null ? orZero(selected.value()) : 0L;
         } catch (FeignException ex) {
-            log.error("Facebook Graph API call failed while fetching metric={} for account={}: {}",
-                    metric, account.getId(), ex.getMessage());
+            log.error("Facebook Graph API call failed while fetching metric={} for account={}: HTTP {}",
+                    metric, account.getId(), ex.status());
             throw new ExternalApiException("Failed to fetch " + metric + " from Facebook for account " + account.getId(), ex);
         }
     }
 
-    private Map<String, Long> fetchBreakdownMetric(String pageId, String metric, String accessToken, SocialAccount account) {
+    private Map<String, Long> fetchBreakdownMetric(String pageId, String metric, LocalDate date, String accessToken, SocialAccount account) {
         try {
-            FacebookBreakdownInsightsResponse response = facebookApiClient.getPageBreakdownInsights(pageId, metric, DAY_PERIOD, accessToken);
+            FacebookBreakdownInsightsResponse response = facebookApiClient.getPageBreakdownInsights(
+                    pageId, metric, DAY_PERIOD, date.toString(), date.plusDays(1).toString(), accessToken);
             if (response == null || response.data() == null || response.data().isEmpty()) {
                 return Map.of();
             }
             List<FacebookBreakdownInsightsResponse.ValueEntry> values = response.data().get(0).values();
-            if (values == null || values.isEmpty() || values.get(values.size() - 1).value() == null) {
-                return Map.of();
-            }
-            return values.get(values.size() - 1).value();
+            FacebookBreakdownInsightsResponse.ValueEntry selected = selectValueForDate(values, date, FacebookBreakdownInsightsResponse.ValueEntry::endTime);
+            return selected != null && selected.value() != null ? selected.value() : Map.of();
         } catch (FeignException ex) {
-            log.error("Facebook Graph API call failed while fetching metric={} for account={}: {}",
-                    metric, account.getId(), ex.getMessage());
+            log.error("Facebook Graph API call failed while fetching metric={} for account={}: HTTP {}",
+                    metric, account.getId(), ex.status());
             throw new ExternalApiException("Failed to fetch " + metric + " from Facebook for account " + account.getId(), ex);
         }
     }
 
-    private Map<String, Long> fetchBreakdownMetricOrEmpty(String pageId, String metric, String accessToken, SocialAccount account) {
+    private Map<String, Long> fetchBreakdownMetricOrEmpty(String pageId, String metric, LocalDate date, String accessToken, SocialAccount account) {
         try {
-            return fetchBreakdownMetric(pageId, metric, accessToken, account);
+            return fetchBreakdownMetric(pageId, metric, date, accessToken, account);
         } catch (ExternalApiException ex) {
-            log.warn("Facebook metric={} unavailable for account={}, defaulting to empty: {}",
-                    metric, account.getId(), ex.getMessage());
+            log.warn("Facebook metric={} unavailable for account={}, defaulting to empty", metric, account.getId());
             return Map.of();
         }
     }
@@ -272,14 +273,18 @@ public class FacebookSocialMediaClient implements SocialMediaClient {
             FacebookPostsResponse response = facebookApiClient.getPagePosts(pageId, POST_FIELDS, limit, accessToken);
             return response != null && response.data() != null ? response.data() : List.of();
         } catch (FeignException ex) {
-            log.warn("Failed to fetch recent posts for account={}: {}", account.getId(), ex.getMessage());
+            log.warn("Failed to fetch recent posts for account={}: HTTP {}", account.getId(), ex.status());
             return List.of();
         }
     }
 
     private long fetchPostViews(String postId, String accessToken, SocialAccount account) {
         try {
-            FacebookInsightsResponse response = facebookApiClient.getPostInsights(postId, POST_VIEWS_METRIC, accessToken);
+            // "lifetime" is required for this endpoint and, unlike the
+            // day-scoped Page metrics above, is expected to return a single
+            // cumulative value rather than a per-day series - no
+            // date-matching needed, just take whatever comes back.
+            FacebookInsightsResponse response = facebookApiClient.getPostInsights(postId, POST_VIEWS_METRIC, LIFETIME_PERIOD, accessToken);
             if (response == null || response.data() == null || response.data().isEmpty()) {
                 return 0L;
             }
@@ -287,10 +292,41 @@ public class FacebookSocialMediaClient implements SocialMediaClient {
             if (values == null || values.isEmpty()) {
                 return 0L;
             }
-            return orZero(values.get(0).value());
+            return orZero(values.get(values.size() - 1).value());
         } catch (FeignException ex) {
-            log.warn("Failed to fetch view count for post={} account={}: {}", postId, account.getId(), ex.getMessage());
+            log.warn("Failed to fetch view count for post={} account={}: HTTP {}", postId, account.getId(), ex.status());
             return 0L;
+        }
+    }
+
+    /**
+     * Picks the value entry whose end_time falls on the requested date,
+     * rather than trusting a specific array position/order (never
+     * confirmed by Meta's docs to be guaranteed ascending or descending).
+     * Falls back to the last entry if none match exactly - e.g. if the API
+     * still returns exactly one value despite the since/until scoping
+     * above, its end_time should already equal the requested date, but this
+     * degrades safely instead of returning nothing if that assumption
+     * doesn't hold in some edge case.
+     */
+    private <T> T selectValueForDate(List<T> values, LocalDate date, java.util.function.Function<T, String> endTimeExtractor) {
+        if (values == null || values.isEmpty()) {
+            return null;
+        }
+        return values.stream()
+                .filter(v -> date.equals(parseEndTimeDate(endTimeExtractor.apply(v))))
+                .findFirst()
+                .orElseGet(() -> values.get(values.size() - 1));
+    }
+
+    private LocalDate parseEndTimeDate(String endTimeIso) {
+        if (endTimeIso == null || endTimeIso.isBlank()) {
+            return null;
+        }
+        try {
+            return OffsetDateTime.parse(endTimeIso, CREATED_TIME_FORMAT).toLocalDate();
+        } catch (Exception ex) {
+            return null;
         }
     }
 

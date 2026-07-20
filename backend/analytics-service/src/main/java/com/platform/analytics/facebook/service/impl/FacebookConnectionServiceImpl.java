@@ -104,7 +104,7 @@ public class FacebookConnectionServiceImpl implements FacebookConnectionService 
             }
             return response.data().get(0);
         } catch (FeignException ex) {
-            log.error("Failed to fetch managed Pages during Facebook connect: {}", ex.getMessage());
+            log.error("Failed to fetch managed Pages during Facebook connect: HTTP {}", ex.status());
             throw new ExternalApiException("Failed to fetch managed Facebook Pages", ex);
         }
     }
@@ -113,7 +113,7 @@ public class FacebookConnectionServiceImpl implements FacebookConnectionService 
         try {
             return facebookApiClient.getPage(pageId, PAGE_FIELDS, pageAccessToken);
         } catch (FeignException ex) {
-            log.error("Failed to fetch Page details during Facebook connect: {}", ex.getMessage());
+            log.error("Failed to fetch Page details during Facebook connect: HTTP {}", ex.status());
             throw new ExternalApiException("Failed to fetch Facebook Page details", ex);
         }
     }

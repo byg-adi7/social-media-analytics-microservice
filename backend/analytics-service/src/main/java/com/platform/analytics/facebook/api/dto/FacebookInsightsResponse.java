@@ -1,6 +1,7 @@
 package com.platform.analytics.facebook.api.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.List;
 
@@ -19,7 +20,13 @@ public record FacebookInsightsResponse(List<Metric> data) {
     public record Metric(String name, String period, List<ValueEntry> values) {
     }
 
+    /**
+     * {@code endTime} identifies which day/period this value covers -
+     * selecting a value by matching this against the requested date is
+     * correct regardless of what order the API returns the values array in
+     * (never confirmed to be guaranteed ascending/descending).
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record ValueEntry(Long value) {
+    public record ValueEntry(Long value, @JsonProperty("end_time") String endTime) {
     }
 }

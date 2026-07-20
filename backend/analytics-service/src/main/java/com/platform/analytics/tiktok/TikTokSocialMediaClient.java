@@ -115,7 +115,7 @@ public class TikTokSocialMediaClient implements SocialMediaClient {
                 recentComments, // comments — approximated: summed comment_count across the most recent page of videos
                 recentShares,   // shares — approximated: summed share_count across the most recent page of videos
                 0L,             // saves — not exposed by the Display API
-                videoCount
+                postsToday      // posts published on this specific date, not the account's lifetime video_count
         );
     }
 

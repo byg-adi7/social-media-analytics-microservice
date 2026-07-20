@@ -66,7 +66,7 @@ public class FacebookOAuthServiceImpl implements FacebookOAuthService {
                     facebookProperties.getAppSecret(),
                     authorizationCode);
         } catch (FeignException ex) {
-            log.error("Facebook OAuth code exchange failed: {}", ex.getMessage());
+            log.error("Facebook OAuth code exchange failed: HTTP {}", ex.status());
             throw new ExternalApiException("Failed to exchange authorization code with Facebook", ex);
         }
     }
@@ -80,7 +80,7 @@ public class FacebookOAuthServiceImpl implements FacebookOAuthService {
                     facebookProperties.getAppSecret(),
                     shortLivedUserToken);
         } catch (FeignException ex) {
-            log.error("Facebook long-lived token exchange failed: {}", ex.getMessage());
+            log.error("Facebook long-lived token exchange failed: HTTP {}", ex.status());
             throw new ExternalApiException("Failed to exchange for a long-lived Facebook user token", ex);
         }
     }

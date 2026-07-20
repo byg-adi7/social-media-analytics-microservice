@@ -104,7 +104,7 @@ public class InstagramConnectionServiceImpl implements InstagramConnectionServic
         try {
             return instagramApiClient.getProfile(PROFILE_FIELDS, accessToken);
         } catch (FeignException ex) {
-            log.error("Failed to fetch profile during Instagram connect: {}", ex.getMessage());
+            log.error("Failed to fetch profile during Instagram connect: HTTP {}", ex.status());
             throw new ExternalApiException("Failed to fetch Instagram profile", ex);
         }
     }

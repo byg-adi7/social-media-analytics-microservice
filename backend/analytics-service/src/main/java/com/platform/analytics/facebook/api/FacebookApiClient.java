@@ -67,24 +67,31 @@ public interface FacebookApiClient {
 
     /**
      * Fetches scalar (single-number-per-period) Page-level insights
-     * metrics, e.g. {@code page_follows}, {@code page_media_view}.
+     * metrics, e.g. {@code page_follows}, {@code page_media_view}, scoped
+     * to the [since, until) window so the response contains (at most) the
+     * single day being requested.
      */
     @GetMapping("/{pageId}/insights")
     FacebookInsightsResponse getPageInsights(
             @PathVariable("pageId") String pageId,
             @RequestParam("metric") String metric,
             @RequestParam("period") String period,
+            @RequestParam("since") String since,
+            @RequestParam("until") String until,
             @RequestParam("access_token") String accessToken);
 
     /**
      * Fetches breakdown-shaped (map-valued) Page-level insights metrics,
-     * e.g. {@code page_actions_post_reactions_total}, {@code page_follows_city}.
+     * e.g. {@code page_actions_post_reactions_total}, {@code page_follows_city},
+     * scoped to the [since, until) window - see {@link #getPageInsights}.
      */
     @GetMapping("/{pageId}/insights")
     FacebookBreakdownInsightsResponse getPageBreakdownInsights(
             @PathVariable("pageId") String pageId,
             @RequestParam("metric") String metric,
             @RequestParam("period") String period,
+            @RequestParam("since") String since,
+            @RequestParam("until") String until,
             @RequestParam("access_token") String accessToken);
 
     /**
@@ -99,10 +106,15 @@ public interface FacebookApiClient {
 
     /**
      * Fetches a single post's view-count insight ({@code post_media_view}).
+     * {@code period} is required by the Graph API for this endpoint - Meta's
+     * docs list {@code lifetime} for post-level metrics like this one
+     * (a post has no "daily" concept the way a Page does; engagement just
+     * accumulates over the post's whole life).
      */
     @GetMapping("/{postId}/insights")
     FacebookInsightsResponse getPostInsights(
             @PathVariable("postId") String postId,
             @RequestParam("metric") String metric,
+            @RequestParam("period") String period,
             @RequestParam("access_token") String accessToken);
 }

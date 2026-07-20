@@ -56,10 +56,16 @@ import java.util.Optional;
  *       expose total watch time at the account level (only a per-Reel
  *       average watch time exists, which isn't meaningfully summable into
  *       a daily total).</li>
- *   <li>{@code posts} reflects the account's all-time {@code media_count},
- *       a cumulative snapshot rather than a true daily delta — the same
- *       approach {@link com.platform.analytics.youtube.YouTubeSocialMediaClient}
- *       uses for the same reason (no day-by-day breakdown API).</li>
+ *   <li>{@code posts} is the count of media items whose {@code timestamp}
+ *       falls on the requested date, approximated from the most recent
+ *       {@value #RECENT_MEDIA_LIMIT} media items — the same approach
+ *       {@link com.platform.analytics.youtube.YouTubeSocialMediaClient}
+ *       uses, since the Graph API has no direct day-by-day post-count
+ *       metric. This is deliberately <b>not</b> the account's all-time
+ *       {@code media_count} (a cumulative total, not a per-day figure) —
+ *       an earlier version of this client used that cumulative count
+ *       directly, which silently broke every downstream computation that
+ *       sums {@code posts} across a date range.</li>
  * </ul>
  */
 @Slf4j
@@ -78,6 +84,7 @@ public class InstagramSocialMediaClient implements SocialMediaClient {
     private static final String TOTAL_VALUE_METRIC_TYPE = "total_value";
     private static final String DAY_PERIOD = "day";
     private static final long REFRESH_BUFFER_DAYS = 7;
+    private static final int RECENT_MEDIA_LIMIT = 25;
 
     private final InstagramApiClient instagramApiClient;
     private final InstagramOAuthService instagramOAuthService;
@@ -96,7 +103,10 @@ public class InstagramSocialMediaClient implements SocialMediaClient {
         InstagramProfileResponse profile = fetchProfile(accessToken, account);
         long followers = profile.followersCount() != null ? profile.followersCount() : 0L;
         long following = profile.followsCount() != null ? profile.followsCount() : 0L;
-        long mediaCount = profile.mediaCount() != null ? profile.mediaCount() : 0L;
+
+        long postsToday = fetchRecentMedia(igUserId, accessToken, account).stream()
+                .filter(item -> publishedOn(item.timestamp(), date))
+                .count();
 
         Map<String, Long> insights = fetchAccountInsights(igUserId, accessToken, account);
         long reach = insights.getOrDefault("reach", 0L);
@@ -121,7 +131,7 @@ public class InstagramSocialMediaClient implements SocialMediaClient {
                 comments,
                 shares,
                 saves,
-                mediaCount // posts — cumulative total, same approach as YouTubeSocialMediaClient
+                postsToday // posts published on this specific date, not the account's lifetime media_count
         );
     }
 
@@ -144,8 +154,8 @@ public class InstagramSocialMediaClient implements SocialMediaClient {
                     .limit(limit)
                     .toList();
         } catch (FeignException ex) {
-            log.error("Instagram Graph API call failed while fetching top content for account={}: {}",
-                    account.getId(), ex.getMessage());
+            log.error("Instagram Graph API call failed while fetching top content for account={}: HTTP {}",
+                    account.getId(), ex.status());
             throw new ExternalApiException("Failed to fetch top content from Instagram for account " + account.getId(), ex);
         }
     }
@@ -174,8 +184,8 @@ public class InstagramSocialMediaClient implements SocialMediaClient {
             // Common cause: the account has fewer than 100 followers, Meta's
             // documented minimum for follower_demographics — not a bug, so
             // this degrades gracefully rather than failing the whole sync.
-            log.warn("Failed to fetch Instagram audience demographics for account={} (often means <100 followers): {}",
-                    account.getId(), ex.getMessage());
+            log.warn("Failed to fetch Instagram audience demographics for account={} (often means <100 followers): HTTP {}",
+                    account.getId(), ex.status());
             return Optional.empty();
         }
     }
@@ -208,10 +218,34 @@ public class InstagramSocialMediaClient implements SocialMediaClient {
         try {
             return instagramApiClient.getProfile(PROFILE_FIELDS, accessToken);
         } catch (FeignException ex) {
-            log.error("Instagram Graph API call failed while fetching profile for account={}: {}",
-                    account.getId(), ex.getMessage());
+            log.error("Instagram Graph API call failed while fetching profile for account={}: HTTP {}",
+                    account.getId(), ex.status());
             throw new ExternalApiException("Failed to fetch profile from Instagram for account " + account.getId(), ex);
         }
+    }
+
+    /**
+     * Fetches the account's most recent media, used to count how many were
+     * published on a specific date (Instagram's Graph API has no per-day
+     * post-count metric, so — like YouTube/TikTok — this approximates it
+     * from a recent-items window rather than falling back to the
+     * account's lifetime {@code media_count}, which is a cumulative total,
+     * not a per-day figure).
+     */
+    private List<InstagramMediaListResponse.Item> fetchRecentMedia(String igUserId, String accessToken, SocialAccount account) {
+        try {
+            InstagramMediaListResponse response = instagramApiClient.getMedia(
+                    igUserId, MEDIA_FIELDS, RECENT_MEDIA_LIMIT, accessToken);
+            return response != null && response.data() != null ? response.data() : List.of();
+        } catch (FeignException ex) {
+            log.warn("Failed to fetch recent media for account={}: HTTP {}", account.getId(), ex.status());
+            return List.of();
+        }
+    }
+
+    private boolean publishedOn(String timestampIso, LocalDate date) {
+        LocalDate published = parseTimestamp(timestampIso);
+        return published != null && published.isEqual(date);
     }
 
     private Map<String, Long> fetchAccountInsights(String igUserId, String accessToken, SocialAccount account) {
@@ -229,7 +263,7 @@ public class InstagramSocialMediaClient implements SocialMediaClient {
             }
             return result;
         } catch (FeignException ex) {
-            log.warn("Failed to fetch Instagram account insights for account={}: {}", account.getId(), ex.getMessage());
+            log.warn("Failed to fetch Instagram account insights for account={}: HTTP {}", account.getId(), ex.status());
             return Map.of();
         }
     }

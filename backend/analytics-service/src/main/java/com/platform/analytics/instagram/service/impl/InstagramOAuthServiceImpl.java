@@ -106,7 +106,7 @@ public class InstagramOAuthServiceImpl implements InstagramOAuthService {
         } catch (ExternalApiException ex) {
             throw ex;
         } catch (Exception ex) {
-            log.error("Failed to exchange authorization code for Instagram short-lived token: {}", ex.getMessage());
+            log.error("Failed to exchange authorization code for Instagram short-lived token: {}", ex.getClass().getSimpleName());
             throw new ExternalApiException("Failed to exchange authorization code for Instagram short-lived token", ex);
         }
     }
@@ -117,7 +117,7 @@ public class InstagramOAuthServiceImpl implements InstagramOAuthService {
             return instagramApiClient.exchangeForLongLivedToken(
                     LONG_LIVED_GRANT_TYPE, instagramProperties.getClientSecret(), shortLivedAccessToken);
         } catch (FeignException ex) {
-            log.error("Failed to exchange Instagram short-lived token for a long-lived token: {}", ex.getMessage());
+            log.error("Failed to exchange Instagram short-lived token for a long-lived token: HTTP {}", ex.status());
             throw new ExternalApiException("Failed to exchange Instagram short-lived token for a long-lived token", ex);
         }
     }
@@ -127,7 +127,7 @@ public class InstagramOAuthServiceImpl implements InstagramOAuthService {
         try {
             return instagramApiClient.refreshLongLivedToken(REFRESH_GRANT_TYPE, longLivedAccessToken);
         } catch (FeignException ex) {
-            log.error("Failed to refresh Instagram long-lived token: {}", ex.getMessage());
+            log.error("Failed to refresh Instagram long-lived token: HTTP {}", ex.status());
             throw new ExternalApiException("Failed to refresh Instagram long-lived token", ex);
         }
     }
