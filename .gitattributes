@@ -1,0 +1,4 @@
+# Shell scripts must always check out with LF endings - a CRLF shebang
+# line ("#!/usr/bin/env bash\r") fails to execute at all on Linux (CI
+# runners, containers), which is where these actually run.
+*.sh text eol=lf
