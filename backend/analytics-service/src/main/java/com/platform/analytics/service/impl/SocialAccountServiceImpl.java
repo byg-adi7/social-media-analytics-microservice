@@ -1,6 +1,10 @@
 package com.platform.analytics.service.impl;
 
+import com.platform.analytics.client.NotificationServiceClient;
+import com.platform.analytics.config.InternalApiProperties;
+import com.platform.analytics.constant.NotificationType;
 import com.platform.analytics.dto.request.ConnectAccountRequest;
+import com.platform.analytics.dto.request.CreateNotificationRequest;
 import com.platform.analytics.dto.request.UpdateAccountRequest;
 import com.platform.analytics.dto.response.SocialAccountResponse;
 import com.platform.analytics.entity.SocialAccount;
@@ -29,6 +33,8 @@ public class SocialAccountServiceImpl implements SocialAccountService {
     private final SocialAccountMapper socialAccountMapper;
     private final PlatformValidator platformValidator;
     private final AnalyticsSyncService analyticsSyncService;
+    private final NotificationServiceClient notificationServiceClient;
+    private final InternalApiProperties internalApiProperties;
 
     @Override
     @Transactional
@@ -62,7 +68,28 @@ public class SocialAccountServiceImpl implements SocialAccountService {
         // Perform an initial sync so the dashboard has data immediately.
         analyticsSyncService.syncAccount(saved);
 
+        notifyAccountConnected(saved);
+
         return socialAccountMapper.toResponse(saved);
+    }
+
+    /**
+     * Best-effort: a Notification Service outage must never fail an
+     * otherwise-successful account connection, so this is deliberately
+     * swallowed rather than allowed to propagate.
+     */
+    private void notifyAccountConnected(SocialAccount account) {
+        try {
+            notificationServiceClient.createNotification(
+                    internalApiProperties.getKey(),
+                    new CreateNotificationRequest(
+                            account.getUserId(),
+                            NotificationType.ACCOUNT_CONNECTED,
+                            "Your " + account.getPlatform().getDisplayName() + " account was connected successfully."));
+        } catch (Exception ex) {
+            log.warn("Failed to send account-connected notification for account {}: {}",
+                    account.getId(), ex.getMessage());
+        }
     }
 
     @Override

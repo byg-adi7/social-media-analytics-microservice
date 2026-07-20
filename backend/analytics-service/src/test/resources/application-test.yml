@@ -51,6 +51,12 @@ facebook:
 oauth:
   state-secret: test-secret
 
+notification-service:
+  url: http://localhost:9997
+
+internal-api:
+  key: test-internal-api-key
+
 logging:
   level:
     root: WARN

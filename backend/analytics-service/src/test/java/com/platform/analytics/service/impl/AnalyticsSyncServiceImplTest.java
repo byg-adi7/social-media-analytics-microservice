@@ -1,7 +1,9 @@
 package com.platform.analytics.service.impl;
 
+import com.platform.analytics.client.NotificationServiceClient;
 import com.platform.analytics.client.SocialMediaClient;
 import com.platform.analytics.client.SocialMediaClientResolver;
+import com.platform.analytics.config.InternalApiProperties;
 import com.platform.analytics.constant.Platform;
 import com.platform.analytics.entity.SocialAccount;
 import com.platform.analytics.repository.AnalyticsRepository;
@@ -40,13 +42,20 @@ class AnalyticsSyncServiceImplTest {
     @Mock
     private AnalyticsSyncService self;
 
+    @Mock
+    private NotificationServiceClient notificationServiceClient;
+
+    @Mock
+    private InternalApiProperties internalApiProperties;
+
     private AnalyticsSyncServiceImpl analyticsSyncService;
     private SocialAccount account;
 
     @BeforeEach
     void setUp() {
         analyticsSyncService = new AnalyticsSyncServiceImpl(
-                socialAccountRepository, analyticsRepository, socialMediaClientResolver, self);
+                socialAccountRepository, analyticsRepository, socialMediaClientResolver,
+                notificationServiceClient, internalApiProperties, self);
 
         account = SocialAccount.builder()
                 .id(UUID.randomUUID())
@@ -94,5 +103,42 @@ class AnalyticsSyncServiceImplTest {
         verify(self).syncAccount(account);
         verify(self).syncAccount(other);
         verifyNoInteractions(mockClient);
+    }
+
+    @Test
+    void syncAllActiveAccounts_notifiesOnFailure_butKeepsProcessingOtherAccounts() {
+        SocialAccount other = SocialAccount.builder()
+                .id(UUID.randomUUID())
+                .userId(UUID.randomUUID())
+                .platform(Platform.INSTAGRAM)
+                .accountId("ig-456")
+                .connectedAt(LocalDateTime.now())
+                .active(true)
+                .build();
+
+        when(socialAccountRepository.findAllActiveAccounts()).thenReturn(List.of(account, other));
+        when(internalApiProperties.getKey()).thenReturn("test-key");
+        doThrow(new RuntimeException("external API down")).when(self).syncAccount(account);
+
+        analyticsSyncService.syncAllActiveAccounts();
+
+        verify(self).syncAccount(account);
+        verify(self).syncAccount(other);
+        verify(notificationServiceClient).createNotification(eq("test-key"), any());
+    }
+
+    @Test
+    void syncAllActiveAccounts_notificationServiceDown_doesNotBreakTheLoop() {
+        when(socialAccountRepository.findAllActiveAccounts()).thenReturn(List.of(account));
+        when(internalApiProperties.getKey()).thenReturn("test-key");
+        doThrow(new RuntimeException("sync failed")).when(self).syncAccount(account);
+        doThrow(new RuntimeException("notification service unreachable"))
+                .when(notificationServiceClient).createNotification(any(), any());
+
+        // Must not throw - a Notification Service outage is best-effort and
+        // must never propagate out of the scheduled sync loop.
+        analyticsSyncService.syncAllActiveAccounts();
+
+        verify(notificationServiceClient).createNotification(eq("test-key"), any());
     }
 }

@@ -1,5 +1,7 @@
 package com.platform.analytics.service.impl;
 
+import com.platform.analytics.client.NotificationServiceClient;
+import com.platform.analytics.config.InternalApiProperties;
 import com.platform.analytics.constant.Platform;
 import com.platform.analytics.dto.request.ConnectAccountRequest;
 import com.platform.analytics.dto.response.SocialAccountResponse;
@@ -24,6 +26,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,6 +43,12 @@ class SocialAccountServiceImplTest {
 
     @Mock
     private AnalyticsSyncService analyticsSyncService;
+
+    @Mock
+    private NotificationServiceClient notificationServiceClient;
+
+    @Mock
+    private InternalApiProperties internalApiProperties;
 
     @InjectMocks
     private SocialAccountServiceImpl socialAccountService;
@@ -76,12 +85,37 @@ class SocialAccountServiceImplTest {
                 .thenReturn(false);
         when(socialAccountRepository.save(any(SocialAccount.class))).thenReturn(account);
         when(socialAccountMapper.toResponse(account)).thenReturn(SocialAccountResponse.builder().id(accountId).build());
+        when(internalApiProperties.getKey()).thenReturn("test-key");
 
         SocialAccountResponse response = socialAccountService.connectAccount(userId, request);
 
         assertThat(response.getId()).isEqualTo(accountId);
         verify(platformValidator).validate(Platform.YOUTUBE);
         verify(analyticsSyncService).syncAccount(account);
+        verify(notificationServiceClient).createNotification(eq("test-key"), any());
+    }
+
+    @Test
+    void connectAccount_notificationServiceDown_stillReturnsSuccessfully() {
+        ConnectAccountRequest request = ConnectAccountRequest.builder()
+                .platform(Platform.YOUTUBE)
+                .accountId("yt-123")
+                .accountName("My Channel")
+                .accessToken("token")
+                .build();
+
+        when(socialAccountRepository.existsByUserIdAndPlatformAndAccountId(userId, Platform.YOUTUBE, "yt-123"))
+                .thenReturn(false);
+        when(socialAccountRepository.save(any(SocialAccount.class))).thenReturn(account);
+        when(socialAccountMapper.toResponse(account)).thenReturn(SocialAccountResponse.builder().id(accountId).build());
+        when(internalApiProperties.getKey()).thenReturn("test-key");
+        doThrow(new RuntimeException("notification service unreachable"))
+                .when(notificationServiceClient).createNotification(any(), any());
+
+        // A Notification Service outage must not fail an otherwise-successful connect.
+        SocialAccountResponse response = socialAccountService.connectAccount(userId, request);
+
+        assertThat(response.getId()).isEqualTo(accountId);
     }
 
     @Test

@@ -1,0 +1,28 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:notification_test_db;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  jackson:
+    default-property-inclusion: non_null
+
+auth-service:
+  url: http://localhost:9999
+  validate-token-path: /api/auth/validate
+
+analytics-service:
+  url: http://localhost:9998
+
+internal-api:
+  key: test-internal-api-key
+
+logging:
+  level:
+    root: WARN

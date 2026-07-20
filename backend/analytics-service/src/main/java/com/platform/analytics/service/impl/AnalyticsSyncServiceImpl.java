@@ -1,7 +1,11 @@
 package com.platform.analytics.service.impl;
 
+import com.platform.analytics.client.NotificationServiceClient;
 import com.platform.analytics.client.SocialMediaClient;
 import com.platform.analytics.client.SocialMediaClientResolver;
+import com.platform.analytics.config.InternalApiProperties;
+import com.platform.analytics.constant.NotificationType;
+import com.platform.analytics.dto.request.CreateNotificationRequest;
 import com.platform.analytics.entity.Analytics;
 import com.platform.analytics.entity.SocialAccount;
 import com.platform.analytics.exception.AnalyticsException;
@@ -26,6 +30,8 @@ public class AnalyticsSyncServiceImpl implements AnalyticsSyncService {
     private final SocialAccountRepository socialAccountRepository;
     private final AnalyticsRepository analyticsRepository;
     private final SocialMediaClientResolver socialMediaClientResolver;
+    private final NotificationServiceClient notificationServiceClient;
+    private final InternalApiProperties internalApiProperties;
 
     /**
      * Self-reference obtained through the Spring proxy (not {@code this}),
@@ -42,10 +48,14 @@ public class AnalyticsSyncServiceImpl implements AnalyticsSyncService {
     public AnalyticsSyncServiceImpl(SocialAccountRepository socialAccountRepository,
                                      AnalyticsRepository analyticsRepository,
                                      SocialMediaClientResolver socialMediaClientResolver,
+                                     NotificationServiceClient notificationServiceClient,
+                                     InternalApiProperties internalApiProperties,
                                      @Lazy AnalyticsSyncService self) {
         this.socialAccountRepository = socialAccountRepository;
         this.analyticsRepository = analyticsRepository;
         this.socialMediaClientResolver = socialMediaClientResolver;
+        this.notificationServiceClient = notificationServiceClient;
+        this.internalApiProperties = internalApiProperties;
         this.self = self;
     }
 
@@ -118,10 +128,31 @@ public class AnalyticsSyncServiceImpl implements AnalyticsSyncService {
             } catch (Exception ex) {
                 failureCount++;
                 log.error("Scheduled sync failed for account={}: {}", account.getId(), ex.getMessage());
+                notifySyncFailure(account);
             }
         }
 
         log.info("Scheduled synchronization complete: {} succeeded, {} failed", successCount, failureCount);
+    }
+
+    /**
+     * Best-effort, same reasoning as SocialAccountServiceImpl's
+     * notifyAccountConnected: a Notification Service outage must not
+     * disrupt the sync loop for the remaining accounts.
+     */
+    private void notifySyncFailure(SocialAccount account) {
+        try {
+            notificationServiceClient.createNotification(
+                    internalApiProperties.getKey(),
+                    new CreateNotificationRequest(
+                            account.getUserId(),
+                            NotificationType.SYNC_FAILURE,
+                            "We couldn't sync your " + account.getPlatform().getDisplayName()
+                                    + " account. We'll try again on the next scheduled sync."));
+        } catch (Exception ex) {
+            log.warn("Failed to send sync-failure notification for account {}: {}",
+                    account.getId(), ex.getMessage());
+        }
     }
 }
 

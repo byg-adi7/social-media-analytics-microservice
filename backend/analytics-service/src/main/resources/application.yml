@@ -54,6 +54,16 @@ cors:
 oauth:
   state-secret: ${OAUTH_STATE_SECRET:dev-only-change-me-in-production}
 
+# Notification Service, called on real events (account connected, sync
+# failure) via its internal-only endpoint.
+notification-service:
+  url: ${NOTIFICATION_SERVICE_URL:http://localhost:8003}
+
+# Shared secret presented to the Notification Service's /internal/**
+# endpoints. Must match internal-api.key over there.
+internal-api:
+  key: ${INTERNAL_API_KEY:dev-only-change-me-in-production}
+
 feign:
   client:
     config:
@@ -78,6 +88,9 @@ feign:
       facebook-graph-api:
         connectTimeout: 5000
         readTimeout: 10000
+      notification-service:
+        connectTimeout: 3000
+        readTimeout: 5000
 
 # Application specific settings
 analytics:

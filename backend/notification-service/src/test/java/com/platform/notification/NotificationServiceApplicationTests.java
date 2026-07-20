@@ -1,11 +1,11 @@
-package com.platform.analytics;
+package com.platform.notification;
 
+import com.platform.notification.client.AnalyticsServiceClient;
+import com.platform.notification.client.AuthServiceClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.ActiveProfiles;
-import com.platform.analytics.client.AuthServiceClient;
-import com.platform.analytics.client.NotificationServiceClient;
 
 /**
  * Verifies the full Spring application context loads successfully with all
@@ -13,7 +13,7 @@ import com.platform.analytics.client.NotificationServiceClient;
  */
 @SpringBootTest
 @ActiveProfiles("test")
-class AnalyticsServiceApplicationTests {
+class NotificationServiceApplicationTests {
 
     // These Feign clients would attempt a real connection during context
     // initialization checks in some environments; mocking them keeps this
@@ -22,7 +22,7 @@ class AnalyticsServiceApplicationTests {
     private AuthServiceClient authServiceClient;
 
     @MockBean
-    private NotificationServiceClient notificationServiceClient;
+    private AnalyticsServiceClient analyticsServiceClient;
 
     @Test
     void contextLoads() {

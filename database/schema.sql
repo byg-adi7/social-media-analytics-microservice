@@ -1,12 +1,13 @@
 -- DEPRECATED: no longer mounted by docker-compose.yml's postgres init.
--- auth-service and analytics-service each manage their own tables via
--- Hibernate (spring.jpa.hibernate.ddl-auto=update) from their JPA
--- entities, which have diverged from this schema (UUID primary keys,
--- richer per-platform OAuth columns on social_accounts, etc.) - applying
--- this script against their tables would conflict with what Hibernate
--- generates. Kept for historical/reference purposes only. The
--- notifications/reports tables below also correspond to a
--- notification-service that was never implemented on any branch.
+-- auth-service, analytics-service and notification-service each manage
+-- their own tables via Hibernate (spring.jpa.hibernate.ddl-auto=update)
+-- from their JPA entities, which have diverged from this schema (UUID
+-- primary keys, richer per-platform OAuth columns on social_accounts,
+-- no cross-service foreign keys on notifications/reports since those
+-- tables are now owned by the separate notification-service, etc.) -
+-- applying this script would conflict with what Hibernate generates.
+-- Kept for historical/reference purposes only. The subscriptions table
+-- below still corresponds to a feature no service implements.
 DROP TABLE IF EXISTS notifications CASCADE;
 DROP TABLE IF EXISTS reports CASCADE;
 DROP TABLE IF EXISTS analytics CASCADE;

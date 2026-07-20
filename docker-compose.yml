@@ -52,6 +52,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: insight123
       SERVER_PORT: 8002
       AUTH_SERVICE_URL: http://auth-service:8001
+      NOTIFICATION_SERVICE_URL: http://notification-service:8003
+      INTERNAL_API_KEY: dev-only-internal-key-change-in-production
     ports:
       - "8002:8002"
     depends_on:
@@ -61,9 +63,30 @@ services:
         condition: service_started
     networks:
       - audienceinsights-network
-  # notification-service: referenced by nginx.conf/schema.sql but not yet
-  # implemented on any branch - intentionally omitted so the stack actually
-  # starts. See the integration report for this known gap.
+  notification-service:
+    build:
+      context: ./backend/notification-service
+      dockerfile: Dockerfile
+    container_name: notification-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/audienceinsights
+      SPRING_DATASOURCE_USERNAME: audience
+      SPRING_DATASOURCE_PASSWORD: insight123
+      SERVER_PORT: 8003
+      AUTH_SERVICE_URL: http://auth-service:8001
+      ANALYTICS_SERVICE_URL: http://analytics-service:8002
+      INTERNAL_API_KEY: dev-only-internal-key-change-in-production
+    ports:
+      - "8003:8003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+      analytics-service:
+        condition: service_started
+    networks:
+      - audienceinsights-network
   api-gateway:
     image: nginx:alpine
     container_name: api-gateway
@@ -74,6 +97,7 @@ services:
     depends_on:
       - auth-service
       - analytics-service
+      - notification-service
     networks:
       - audienceinsights-network
 networks:
