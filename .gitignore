@@ -7,3 +7,7 @@ out/
 *.iml
 .vscode/
 .DS_Store
+
+# Real secrets - never commit. Copy .env.example to .env and fill in
+# real values locally / inject them at deploy time instead.
+.env

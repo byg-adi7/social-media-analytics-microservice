@@ -461,6 +461,8 @@ Scaling past a handful of testers to real external users requires Meta **App Rev
 | `FACEBOOK_REDIRECT_URI` | http://localhost:8082/api/oauth/facebook/callback | Must match the Meta app's configured redirect URI |
 | `FACEBOOK_FRONTEND_REDIRECT` | http://localhost:3000/dashboard | Where the browser lands after a successful connect |
 | `OAUTH_STATE_SECRET` | dev-only-change-me-in-production | HMAC secret signing the OAuth `state` parameter for every platform's connect flow — **set a strong value in production** |
+| `NOTIFICATION_SERVICE_URL` | http://localhost:8003 | Base URL of the Notification Service, called on account-connected/sync-failure events |
+| `INTERNAL_API_KEY` | dev-only-change-me-in-production | Shared secret presented to the Notification Service's internal-only endpoint — **must match its own `INTERNAL_API_KEY`, and must be a strong value in production** |
 
 ### Run Locally
 
@@ -475,11 +477,10 @@ The service starts on `http://localhost:8082`.
 
 ### Run with Docker
 
-```bash
-# Build and start Analytics Service + PostgreSQL
-docker network create platform-network   # once, so other microservices can join
-docker-compose up --build
-```
+This service is one part of the unified platform (Auth Service, Analytics
+Service, Notification Service, Postgres, and an nginx gateway) — see the
+root [README.md](../../README.md) for the actual `docker-compose.yml`
+(at the repo root, not here) and the `.env` setup it requires.
 
 ---
 

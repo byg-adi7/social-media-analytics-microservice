@@ -3,9 +3,9 @@ services:
     image: postgres:14-alpine
     container_name: audienceinsights-db
     environment:
-      POSTGRES_USER: audience
-      POSTGRES_PASSWORD: insight123
-      POSTGRES_DB: audienceinsights
+      POSTGRES_USER: ${POSTGRES_USER:-audience}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env - see .env.example}
+      POSTGRES_DB: ${POSTGRES_DB:-audienceinsights}
     ports:
       - "5432:5432"
     volumes:
@@ -19,7 +19,7 @@ services:
     networks:
       - audienceinsights-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U audience"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-audience}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -29,10 +29,11 @@ services:
       dockerfile: Dockerfile
     container_name: auth-service
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/audienceinsights
-      SPRING_DATASOURCE_USERNAME: audience
-      SPRING_DATASOURCE_PASSWORD: insight123
-      JWT_SECRET: your-secret-key-change-in-production
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-audienceinsights}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-audience}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env - see .env.example}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env - see .env.example}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
       SERVER_PORT: 8001
     ports:
       - "8001:8001"
@@ -47,13 +48,32 @@ services:
       dockerfile: Dockerfile
     container_name: analytics-service
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/audienceinsights
-      SPRING_DATASOURCE_USERNAME: audience
-      SPRING_DATASOURCE_PASSWORD: insight123
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-audienceinsights}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-audience}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env - see .env.example}
       SERVER_PORT: 8002
       AUTH_SERVICE_URL: http://auth-service:8001
       NOTIFICATION_SERVICE_URL: http://notification-service:8003
-      INTERNAL_API_KEY: dev-only-internal-key-change-in-production
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?Set INTERNAL_API_KEY in .env - see .env.example}
+      OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET:?Set OAUTH_STATE_SECRET in .env - see .env.example}
+      # Real platform OAuth credentials - all optional. Any left unset keep
+      # that platform's integration disabled and served from mock data (see
+      # README's "Enabling real platform integrations" section).
+      YOUTUBE_INTEGRATION_ENABLED: ${YOUTUBE_INTEGRATION_ENABLED:-false}
+      YOUTUBE_CLIENT_ID: ${YOUTUBE_CLIENT_ID:-}
+      YOUTUBE_CLIENT_SECRET: ${YOUTUBE_CLIENT_SECRET:-}
+      SPOTIFY_INTEGRATION_ENABLED: ${SPOTIFY_INTEGRATION_ENABLED:-false}
+      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
+      SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET:-}
+      INSTAGRAM_INTEGRATION_ENABLED: ${INSTAGRAM_INTEGRATION_ENABLED:-false}
+      INSTAGRAM_CLIENT_ID: ${INSTAGRAM_CLIENT_ID:-}
+      INSTAGRAM_CLIENT_SECRET: ${INSTAGRAM_CLIENT_SECRET:-}
+      TIKTOK_INTEGRATION_ENABLED: ${TIKTOK_INTEGRATION_ENABLED:-false}
+      TIKTOK_CLIENT_KEY: ${TIKTOK_CLIENT_KEY:-}
+      TIKTOK_CLIENT_SECRET: ${TIKTOK_CLIENT_SECRET:-}
+      FACEBOOK_INTEGRATION_ENABLED: ${FACEBOOK_INTEGRATION_ENABLED:-false}
+      FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
+      FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
     ports:
       - "8002:8002"
     depends_on:
@@ -69,13 +89,13 @@ services:
       dockerfile: Dockerfile
     container_name: notification-service
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/audienceinsights
-      SPRING_DATASOURCE_USERNAME: audience
-      SPRING_DATASOURCE_PASSWORD: insight123
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-audienceinsights}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-audience}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env - see .env.example}
       SERVER_PORT: 8003
       AUTH_SERVICE_URL: http://auth-service:8001
       ANALYTICS_SERVICE_URL: http://analytics-service:8002
-      INTERNAL_API_KEY: dev-only-internal-key-change-in-production
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?Set INTERNAL_API_KEY in .env - see .env.example}
     ports:
       - "8003:8003"
     depends_on:
