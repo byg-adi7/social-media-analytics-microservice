@@ -1,5 +1,12 @@
 # Social Media Analytics Microservice
 
+[![CI](https://github.com/byg-adi7/social-media-analytics-microservice/actions/workflows/ci.yml/badge.svg)](https://github.com/byg-adi7/social-media-analytics-microservice/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/github/license/byg-adi7/social-media-analytics-microservice)](LICENSE)
+![Java](https://img.shields.io/badge/Java-17%20%7C%2021-orange?logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.x-brightgreen?logo=springboot&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-blue?logo=docker&logoColor=white)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/byg-adi7/social-media-analytics-microservice/pulls)
+
 A microservices platform for connecting social media accounts (YouTube,
 Instagram, TikTok, Facebook, Spotify), syncing their analytics, and
 surfacing dashboards, reports, and notifications.
