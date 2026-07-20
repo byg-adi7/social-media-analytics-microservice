@@ -38,7 +38,15 @@ assert_contains() {
 }
 
 echo "=== Smoke test against $BASE_URL ==="
-EMAIL="smoketest-$(date +%s)-$RANDOM@example.com"
+RUN_ID="$(date +%s)-$RANDOM"
+EMAIL="smoketest-$RUN_ID@example.com"
+# Unique per run, not just the email: uk_platform_account_id is a GLOBAL
+# constraint (platform + account_id, not scoped per user - see the fix for
+# this exact class of bug), so a fixed accountId would spuriously fail on
+# a second local run against a database that wasn't wiped between runs.
+# CI always starts from a fresh volume, so this only matters for repeated
+# local runs.
+ACCOUNT_ID="yt-smoketest-$RUN_ID"
 
 echo "--- register ---"
 REGISTER_BODY=$(mktemp)
@@ -58,7 +66,7 @@ echo "--- connect a mock YouTube account ---"
 CONNECT_BODY=$(mktemp)
 CONNECT_STATUS=$(curl -s -o "$CONNECT_BODY" -w "%{http_code}" -X POST "$BASE_URL/api/accounts/connect" \
     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-    -d '{"platform":"YOUTUBE","accountId":"yt-smoketest","accountName":"Smoke Test Channel","accessToken":"mock-token"}')
+    -d "{\"platform\":\"YOUTUBE\",\"accountId\":\"$ACCOUNT_ID\",\"accountName\":\"Smoke Test Channel\",\"accessToken\":\"mock-token\"}")
 CONNECT_RESPONSE=$(cat "$CONNECT_BODY"); rm -f "$CONNECT_BODY"
 assert_eq "connect returns 201" "201" "$CONNECT_STATUS"
 assert_contains "connected account is YOUTUBE" "$CONNECT_RESPONSE" "YOUTUBE"

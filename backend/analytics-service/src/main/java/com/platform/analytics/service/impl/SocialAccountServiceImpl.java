@@ -41,8 +41,13 @@ public class SocialAccountServiceImpl implements SocialAccountService {
     public SocialAccountResponse connectAccount(UUID userId, ConnectAccountRequest request) {
         platformValidator.validate(request.getPlatform());
 
-        boolean alreadyConnected = socialAccountRepository.existsByUserIdAndPlatformAndAccountId(
-                userId, request.getPlatform(), request.getAccountId());
+        // Matches uk_platform_account_id's actual scope (platform +
+        // account_id, not per-user) - a per-user-scoped check here would
+        // miss the case where a *different* user already connected this
+        // same external account, and the insert below would fail with a
+        // raw unique-constraint violation instead of this clean error.
+        boolean alreadyConnected = socialAccountRepository.existsByPlatformAndAccountId(
+                request.getPlatform(), request.getAccountId());
 
         if (alreadyConnected) {
             throw new BadRequestException(

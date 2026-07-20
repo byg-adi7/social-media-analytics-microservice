@@ -81,7 +81,7 @@ class SocialAccountServiceImplTest {
                 .accessToken("token")
                 .build();
 
-        when(socialAccountRepository.existsByUserIdAndPlatformAndAccountId(userId, Platform.YOUTUBE, "yt-123"))
+        when(socialAccountRepository.existsByPlatformAndAccountId(Platform.YOUTUBE, "yt-123"))
                 .thenReturn(false);
         when(socialAccountRepository.save(any(SocialAccount.class))).thenReturn(account);
         when(socialAccountMapper.toResponse(account)).thenReturn(SocialAccountResponse.builder().id(accountId).build());
@@ -104,7 +104,7 @@ class SocialAccountServiceImplTest {
                 .accessToken("token")
                 .build();
 
-        when(socialAccountRepository.existsByUserIdAndPlatformAndAccountId(userId, Platform.YOUTUBE, "yt-123"))
+        when(socialAccountRepository.existsByPlatformAndAccountId(Platform.YOUTUBE, "yt-123"))
                 .thenReturn(false);
         when(socialAccountRepository.save(any(SocialAccount.class))).thenReturn(account);
         when(socialAccountMapper.toResponse(account)).thenReturn(SocialAccountResponse.builder().id(accountId).build());
@@ -127,7 +127,7 @@ class SocialAccountServiceImplTest {
                 .accessToken("token")
                 .build();
 
-        when(socialAccountRepository.existsByUserIdAndPlatformAndAccountId(userId, Platform.YOUTUBE, "yt-123"))
+        when(socialAccountRepository.existsByPlatformAndAccountId(Platform.YOUTUBE, "yt-123"))
                 .thenReturn(true);
 
         assertThatThrownBy(() -> socialAccountService.connectAccount(userId, request))

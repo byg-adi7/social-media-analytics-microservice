@@ -91,6 +91,27 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(body);
     }
 
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(
+            org.springframework.dao.DataIntegrityViolationException ex, HttpServletRequest request) {
+        // Defense-in-depth for check-then-insert races (e.g. two concurrent
+        // connectAccount calls for the same platform+account_id both pass
+        // the pre-check before either commits) - the DB constraint is the
+        // real source of truth, so a violation here is a genuine conflict,
+        // not a server bug. Not logging ex.getMessage(): constraint
+        // violation messages can echo back submitted column values.
+        log.warn("Data integrity violation on {}", request.getRequestURI());
+        ErrorResponse body = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.CONFLICT.value())
+                .error(HttpStatus.CONFLICT.getReasonPhrase())
+                .errorCode(ErrorCode.CONFLICT)
+                .message("This resource already exists or conflicts with an existing one")
+                .path(request.getRequestURI())
+                .build();
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(Exception ex, HttpServletRequest request) {
         log.error("Unhandled exception on {}", request.getRequestURI(), ex);
