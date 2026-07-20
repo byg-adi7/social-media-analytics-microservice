@@ -12,7 +12,12 @@ surfacing dashboards, reports, and notifications.
 | `backend/analytics-service` | 8002 | Connects social accounts, syncs their analytics (real integrations for all 5 platforms, falling back to mock data by default), and serves dashboards/charts/reports. See [its README](backend/analytics-service/README.md) for full API docs and per-platform integration setup. |
 | `backend/notification-service` | 8003 | In-app notifications (fired automatically on account-connected/sync-failure events) and on-demand CSV reports pulled from the Analytics Service. |
 | `api-gateway` (nginx) | 8080 | Single public entry point, routes `/api/*` to the right service. |
-| `postgres` | 5432 | Shared Postgres instance — each service manages its own tables via Hibernate (`ddl-auto=update`), not a shared migration script. |
+| `postgres` | 5432 | Shared Postgres instance — each service owns its own tables, managed by its own versioned Flyway migrations (`backend/*/src/main/resources/db/migration`), not a shared script. |
+
+**Building the frontend or want the full API reference?** See
+[`FRONTEND_INTEGRATION_GUIDE.md`](FRONTEND_INTEGRATION_GUIDE.md) — backend
+readiness status, every endpoint, request/response shapes, and the
+authentication flow.
 
 ## Quickstart (Docker)
 
