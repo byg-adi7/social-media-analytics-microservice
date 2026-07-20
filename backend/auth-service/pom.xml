@@ -40,6 +40,17 @@
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
 
+        <!-- Flyway (versioned schema migrations, replaces ddl-auto=update).
+             Spring Boot 3.1.x manages Flyway 9.x, which bundles PostgreSQL
+             support directly in flyway-core - no separate
+             flyway-database-postgresql module existed yet (that split
+             happened in Flyway 10, used by the other two services here on
+             Spring Boot 3.3.x). -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+
         <!-- Spring Security (Password Encryption) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

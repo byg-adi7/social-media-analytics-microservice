@@ -6,7 +6,11 @@ spring:
     password: ""
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      # validate (not create-drop): Flyway's V1 migration creates the
+      # schema; this confirms the entity mapping actually matches what
+      # Flyway produces, rather than Hibernate silently generating its own
+      # schema over it and masking a real mismatch.
+      ddl-auto: validate
     properties:
       hibernate:
         dialect: org.hibernate.dialect.H2Dialect

@@ -16,13 +16,30 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: ${DDL_AUTO:update}
+      # Flyway (db/migration) owns the schema now; Hibernate only validates
+      # that entity mappings match what Flyway created, rather than
+      # auto-altering it.
+      ddl-auto: validate
     show-sql: ${SHOW_SQL:false}
     properties:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
     open-in-view: false
+
+  flyway:
+    # Distinct per service: all 3 services share one physical Postgres
+    # database, and Flyway's default history table name would otherwise
+    # collide across them.
+    table: flyway_schema_history_notification
+    # By the time this service's migrations run, a sibling service may
+    # have already created its own tables in the shared "public" schema.
+    # Flyway's default safety check refuses to migrate into a "non-empty"
+    # schema it doesn't recognize; baseline-version 0 (not the default of
+    # 1) ensures baselining still lets V1 itself run, rather than treating
+    # it as already applied.
+    baseline-on-migrate: true
+    baseline-version: 0
 
   jackson:
     default-property-inclusion: non_null
