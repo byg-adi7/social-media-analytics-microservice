@@ -48,17 +48,22 @@ public class ReportServiceImpl implements ReportService {
             throw new BadRequestException("endPeriod must not be before startPeriod");
         }
 
+        // ISO-8601 explicitly - see AnalyticsServiceClient's class comment on
+        // why these are Strings, not LocalDate, by the time they reach Feign.
+        String startDate = request.getStartPeriod().toString();
+        String endDate = request.getEndPeriod().toString();
+
         String csv;
         try {
             csv = switch (request.getReportType()) {
                 case PLATFORM_COMPARISON -> {
                     List<PlatformMetrics> metrics = analyticsServiceClient.getPlatformComparison(
-                            bearerToken, request.getStartPeriod(), request.getEndPeriod());
+                            bearerToken, startDate, endDate);
                     yield CsvReportFormatter.forPlatformComparison(metrics);
                 }
                 case SUMMARY -> {
                     AnalyticsSummary summary = analyticsServiceClient.getSummary(
-                            bearerToken, request.getStartPeriod(), request.getEndPeriod());
+                            bearerToken, startDate, endDate);
                     yield CsvReportFormatter.forSummary(summary);
                 }
             };

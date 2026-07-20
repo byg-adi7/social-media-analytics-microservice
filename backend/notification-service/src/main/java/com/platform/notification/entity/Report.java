@@ -10,7 +10,6 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -61,8 +60,14 @@ public class Report {
     @Column(name = "status", nullable = false, length = 20)
     private ReportStatus status;
 
-    @Lob
-    @Column(name = "content")
+    // Deliberately not @Lob: on PostgreSQL, Hibernate maps a @Lob String to
+    // the oid/Large Object type, which requires streaming the value inside
+    // an active transaction - reading it back afterward (e.g. a plain list
+    // query with no transaction boundary) throws
+    // "JpaSystemException: Unable to access lob stream". A plain TEXT
+    // column has none of that ceremony and is the standard way to store
+    // CSV-sized text.
+    @Column(name = "content", columnDefinition = "TEXT")
     private String content;
 
     @Column(name = "error_message", length = 1000)

@@ -12,6 +12,7 @@ import com.platform.analytics.util.DateRangeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -22,9 +23,19 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * Every method here is read-only, but still needs an active transaction:
+ * with spring.jpa.open-in-view disabled (deliberately - keeping the
+ * Hibernate session open through view rendering is an anti-pattern),
+ * Analytics.socialAccount (a lazy @ManyToOne) can only be resolved while
+ * the session from the repository call is still open. Without this, every
+ * method below that reads socialAccount.getPlatform() after the
+ * aggregation helper's query returns throws LazyInitializationException.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class AnalyticsQueryServiceImpl implements AnalyticsQueryService {
 
     private static final DateTimeFormatter LABEL_FORMAT = DateTimeFormatter.ofPattern("MMM d");

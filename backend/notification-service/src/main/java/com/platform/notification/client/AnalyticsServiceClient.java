@@ -8,7 +8,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 
-import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -18,6 +17,13 @@ import java.util.List;
  * Service and scopes the data to whichever user it belongs to, so this
  * naturally produces a report for the right user with no separate identity
  * plumbing needed.
+ * <p>
+ * Date params are plain (already ISO-8601-formatted) Strings, not
+ * LocalDate: Feign's default query-param expansion for LocalDate uses a
+ * locale-aware short-date format (e.g. "7/1/26" under the default JVM
+ * locale), not ISO-8601, which the Analytics Service's
+ * {@code @DateTimeFormat(iso = ISO.DATE)} binder rejects with a 400. The
+ * caller is responsible for formatting via LocalDate.toString()/ISO_LOCAL_DATE.
  */
 @FeignClient(name = "analytics-service", url = "${analytics-service.url}")
 public interface AnalyticsServiceClient {
@@ -25,12 +31,12 @@ public interface AnalyticsServiceClient {
     @GetMapping("/api/analytics/platform-comparison")
     List<PlatformMetrics> getPlatformComparison(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String bearerToken,
-            @RequestParam("startDate") LocalDate startDate,
-            @RequestParam("endDate") LocalDate endDate);
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate);
 
     @GetMapping("/api/analytics/summary")
     AnalyticsSummary getSummary(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String bearerToken,
-            @RequestParam("startDate") LocalDate startDate,
-            @RequestParam("endDate") LocalDate endDate);
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate);
 }

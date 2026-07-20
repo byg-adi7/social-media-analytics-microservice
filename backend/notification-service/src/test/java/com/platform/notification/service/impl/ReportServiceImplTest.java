@@ -69,7 +69,8 @@ class ReportServiceImplTest {
 
         PlatformMetrics metrics = new PlatformMetrics(
                 AnalyticsPlatform.YOUTUBE, 1000, 5000, 200, 30, 10, 5, 4.5, 2.1);
-        when(analyticsServiceClient.getPlatformComparison(bearerToken, request.getStartPeriod(), request.getEndPeriod()))
+        when(analyticsServiceClient.getPlatformComparison(
+                bearerToken, request.getStartPeriod().toString(), request.getEndPeriod().toString()))
                 .thenReturn(List.of(metrics));
         when(reportRepository.save(any())).thenAnswer(inv -> {
             Report r = inv.getArgument(0);
@@ -91,7 +92,8 @@ class ReportServiceImplTest {
 
         Request feignRequest = Request.create(Request.HttpMethod.GET, "/api/analytics/summary",
                 java.util.Map.of(), null, StandardCharsets.UTF_8, new RequestTemplate());
-        when(analyticsServiceClient.getSummary(bearerToken, request.getStartPeriod(), request.getEndPeriod()))
+        when(analyticsServiceClient.getSummary(
+                bearerToken, request.getStartPeriod().toString(), request.getEndPeriod().toString()))
                 .thenThrow(new FeignException.ServiceUnavailable("unavailable", feignRequest, null, null));
 
         assertThatThrownBy(() -> reportService.generate(userId, bearerToken, request))
