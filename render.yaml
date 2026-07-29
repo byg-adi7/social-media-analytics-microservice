@@ -1,0 +1,183 @@
+# Render Blueprint - deploys the full stack in one command:
+#   https://dashboard.render.com/blueprints -> New Blueprint Instance,
+#   point it at this repo, Render reads this file automatically.
+#
+# Mirrors docker-compose.yml's current topology exactly (one Postgres +
+# auth-service, analytics-service, notification-service, api-gateway).
+# auth/analytics/notification are declared as private services (`pserv`):
+# no public URL, only reachable from other services on this blueprint via
+# their `name` as hostname - api-gateway is the only public entry point,
+# same role nginx plays locally. If/when the planned microservice
+# consolidation (merging notification-service into analytics-service and
+# retiring auth-service) happens, this file should shrink to match.
+#
+# Secrets marked `sync: false` are never written here - Render prompts for
+# them once in its dashboard when the blueprint is first applied.
+
+databases:
+  - name: audienceinsights-db
+    databaseName: audienceinsights
+    user: audience
+    plan: free
+    postgresMajorVersion: "16"
+
+envVarGroups:
+  - name: shared-internal
+    envVars:
+      # Shared between analytics-service and notification-service to
+      # authenticate the internal-only /internal/notifications endpoint -
+      # must be identical on both sides, hence the shared group.
+      - key: INTERNAL_API_KEY
+        generateValue: true
+
+services:
+  - type: pserv
+    name: auth-service
+    env: docker
+    dockerContext: ./backend/auth-service
+    dockerfilePath: ./backend/auth-service/Dockerfile
+    plan: free
+    port: 8001
+    envVars:
+      - key: SERVER_PORT
+        value: 8001
+      - key: DB_HOST
+        fromDatabase:
+          name: audienceinsights-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: audienceinsights-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: audienceinsights-db
+          property: database
+      - key: DB_USERNAME
+        fromDatabase:
+          name: audienceinsights-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: audienceinsights-db
+          property: password
+      # From your Supabase project: Project Settings -> API -> JWT Settings
+      # ("Legacy JWT Secret"). Identity itself is delegated to Supabase Auth;
+      # this is only used to verify the JWT it issues.
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+
+  - type: pserv
+    name: analytics-service
+    env: docker
+    dockerContext: ./backend/analytics-service
+    dockerfilePath: ./backend/analytics-service/Dockerfile
+    plan: free
+    port: 8002
+    envVars:
+      - key: SERVER_PORT
+        value: 8002
+      - key: DB_HOST
+        fromDatabase:
+          name: audienceinsights-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: audienceinsights-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: audienceinsights-db
+          property: database
+      - key: DB_USERNAME
+        fromDatabase:
+          name: audienceinsights-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: audienceinsights-db
+          property: password
+      - key: AUTH_SERVICE_URL
+        value: http://auth-service:8001
+      - key: NOTIFICATION_SERVICE_URL
+        value: http://notification-service:8003
+      - fromGroup: shared-internal
+      - key: OAUTH_STATE_SECRET
+        generateValue: true
+      # Real platform OAuth integrations - all optional. Leave unset (stays
+      # false / blank) to keep that platform on mock data; see README.md's
+      # "Real <Platform> Integration" sections before enabling one for real.
+      - key: YOUTUBE_INTEGRATION_ENABLED
+        value: false
+      - key: YOUTUBE_CLIENT_ID
+        sync: false
+      - key: YOUTUBE_CLIENT_SECRET
+        sync: false
+      - key: SPOTIFY_INTEGRATION_ENABLED
+        value: false
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      - key: INSTAGRAM_INTEGRATION_ENABLED
+        value: false
+      - key: INSTAGRAM_CLIENT_ID
+        sync: false
+      - key: INSTAGRAM_CLIENT_SECRET
+        sync: false
+      - key: TIKTOK_INTEGRATION_ENABLED
+        value: false
+      - key: TIKTOK_CLIENT_KEY
+        sync: false
+      - key: TIKTOK_CLIENT_SECRET
+        sync: false
+      - key: FACEBOOK_INTEGRATION_ENABLED
+        value: false
+      - key: FACEBOOK_APP_ID
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false
+
+  - type: pserv
+    name: notification-service
+    env: docker
+    dockerContext: ./backend/notification-service
+    dockerfilePath: ./backend/notification-service/Dockerfile
+    plan: free
+    port: 8003
+    envVars:
+      - key: SERVER_PORT
+        value: 8003
+      - key: DB_HOST
+        fromDatabase:
+          name: audienceinsights-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: audienceinsights-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: audienceinsights-db
+          property: database
+      - key: DB_USERNAME
+        fromDatabase:
+          name: audienceinsights-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: audienceinsights-db
+          property: password
+      - key: AUTH_SERVICE_URL
+        value: http://auth-service:8001
+      - key: ANALYTICS_SERVICE_URL
+        value: http://analytics-service:8002
+      - fromGroup: shared-internal
+
+  - type: web
+    name: api-gateway
+    env: docker
+    dockerContext: ./nginx
+    dockerfilePath: ./nginx/Dockerfile
+    plan: free
+    envVars: []
