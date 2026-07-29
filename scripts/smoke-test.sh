@@ -48,16 +48,41 @@ EMAIL="smoketest-$RUN_ID@example.com"
 # local runs.
 ACCOUNT_ID="yt-smoketest-$RUN_ID"
 
-echo "--- register ---"
+echo "--- register (starts unverified, no session token yet) ---"
 REGISTER_BODY=$(mktemp)
 REGISTER_STATUS=$(curl -s -o "$REGISTER_BODY" -w "%{http_code}" -X POST "$BASE_URL/api/auth/register" \
     -H "Content-Type: application/json" \
     -d "{\"username\":\"smoketest\",\"email\":\"$EMAIL\",\"password\":\"Password123!\"}")
 REGISTER_RESPONSE=$(cat "$REGISTER_BODY"); rm -f "$REGISTER_BODY"
 assert_eq "register returns 200" "200" "$REGISTER_STATUS"
-TOKEN=$(extract "$REGISTER_RESPONSE" "token")
+assert_contains "register response reports emailVerified false" "$REGISTER_RESPONSE" "\"emailVerified\":false"
+
+echo "--- login is blocked before verification ---"
+BLOCKED_LOGIN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/auth/login" \
+    -H "Content-Type: application/json" \
+    -d "{\"email\":\"$EMAIL\",\"password\":\"Password123!\"}")
+assert_eq "login before verification returns 403" "403" "$BLOCKED_LOGIN_STATUS"
+
+echo "--- verify email (token pulled directly from Postgres - no real mailbox in CI) ---"
+VERIFICATION_TOKEN=$(docker compose exec -T postgres psql -U "${POSTGRES_USER:-audience}" -d "${POSTGRES_DB:-audienceinsights}" -t -A \
+    -c "SELECT verification_token FROM users WHERE email='$EMAIL';" | tr -d '\r')
+if [ -z "$VERIFICATION_TOKEN" ]; then
+    echo "  FAIL could not read verification_token from the database, cannot continue"
+    exit 1
+fi
+VERIFY_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/auth/verify-email?token=$VERIFICATION_TOKEN")
+assert_eq "verify-email returns 200" "200" "$VERIFY_STATUS"
+
+echo "--- login (now that email is verified) ---"
+LOGIN_BODY=$(mktemp)
+LOGIN_STATUS=$(curl -s -o "$LOGIN_BODY" -w "%{http_code}" -X POST "$BASE_URL/api/auth/login" \
+    -H "Content-Type: application/json" \
+    -d "{\"email\":\"$EMAIL\",\"password\":\"Password123!\"}")
+LOGIN_RESPONSE=$(cat "$LOGIN_BODY"); rm -f "$LOGIN_BODY"
+assert_eq "login returns 200" "200" "$LOGIN_STATUS"
+TOKEN=$(extract "$LOGIN_RESPONSE" "token")
 if [ -z "$TOKEN" ]; then
-    echo "  FAIL no token in register response, cannot continue: $REGISTER_RESPONSE"
+    echo "  FAIL no token in login response, cannot continue: $LOGIN_RESPONSE"
     exit 1
 fi
 echo "  OK   received a token"

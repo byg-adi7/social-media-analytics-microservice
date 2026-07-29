@@ -34,6 +34,9 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env - see .env.example}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env - see .env.example}
       JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      APP_BASE_URL: ${APP_BASE_URL:-http://172.24.145.226:8080}
       SERVER_PORT: 8001
     ports:
       - "8001:8001"

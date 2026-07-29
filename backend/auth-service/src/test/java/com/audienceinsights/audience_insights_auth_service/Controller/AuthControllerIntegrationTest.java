@@ -2,9 +2,13 @@ package com.audienceinsights.audience_insights_auth_service.Controller;
 
 import com.audienceinsights.audience_insights_auth_service.Dto.AuthResponse;
 import com.audienceinsights.audience_insights_auth_service.Dto.LoginRequest;
+import com.audienceinsights.audience_insights_auth_service.Dto.RegisterResponse;
+import com.audienceinsights.audience_insights_auth_service.Dto.ResendVerificationRequest;
 import com.audienceinsights.audience_insights_auth_service.Dto.TokenValidationResponse;
 import com.audienceinsights.audience_insights_auth_service.Dto.UserRequest;
+import com.audienceinsights.audience_insights_auth_service.Entity.User;
 import com.audienceinsights.audience_insights_auth_service.Exception.ErrorResponse;
+import com.audienceinsights.audience_insights_auth_service.Repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,6 +39,9 @@ class AuthControllerIntegrationTest {
     @Autowired
     private TestRestTemplate restTemplate;
 
+    @Autowired
+    private UserRepository userRepository;
+
     @BeforeEach
     void disableRequestStreaming() {
         // The JDK's default HttpURLConnection-based request factory can't
@@ -49,25 +56,40 @@ class AuthControllerIntegrationTest {
     }
 
     @Test
-    void register_thenLogin_thenValidate_fullRoundTrip() {
+    void register_thenVerify_thenLogin_thenValidate_fullRoundTrip() {
         String email = uniqueEmail();
         UserRequest registerRequest = new UserRequest();
         registerRequest.setUsername("roundtrip");
         registerRequest.setEmail(email);
         registerRequest.setPassword("Password123!");
 
-        ResponseEntity<AuthResponse> registerResponse =
-                restTemplate.postForEntity("/api/auth/register", registerRequest, AuthResponse.class);
+        ResponseEntity<RegisterResponse> registerResponse =
+                restTemplate.postForEntity("/api/auth/register", registerRequest, RegisterResponse.class);
 
         assertThat(registerResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(registerResponse.getBody()).isNotNull();
-        assertThat(registerResponse.getBody().getToken()).isNotBlank();
         assertThat(registerResponse.getBody().getEmail()).isEqualTo(email);
-        assertThat(registerResponse.getBody().getRole()).isEqualTo("USER");
+        assertThat(registerResponse.getBody().isEmailVerified()).isFalse();
+
+        // No real mail server in tests - pull the token straight from the DB,
+        // exactly like a real user copying it out of the email they received.
+        User persisted = userRepository.findByEmail(email).orElseThrow();
+        String verificationToken = persisted.getVerificationToken();
+        assertThat(verificationToken).isNotBlank();
 
         LoginRequest loginRequest = new LoginRequest();
         loginRequest.setEmail(email);
         loginRequest.setPassword("Password123!");
+
+        ResponseEntity<ErrorResponse> blockedLogin =
+                restTemplate.postForEntity("/api/auth/login", loginRequest, ErrorResponse.class);
+        assertThat(blockedLogin.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(blockedLogin.getBody().getMessage()).containsIgnoringCase("verify your email");
+
+        ResponseEntity<String> verifyResponse = restTemplate.getForEntity(
+                "/api/auth/verify-email?token=" + verificationToken, String.class);
+        assertThat(verifyResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(verifyResponse.getBody()).containsIgnoringCase("verified");
 
         ResponseEntity<AuthResponse> loginResponse =
                 restTemplate.postForEntity("/api/auth/login", loginRequest, AuthResponse.class);
@@ -89,6 +111,56 @@ class AuthControllerIntegrationTest {
     }
 
     @Test
+    void login_returnsForbidden_whenEmailNotYetVerified() {
+        String email = uniqueEmail();
+        UserRequest registerRequest = new UserRequest();
+        registerRequest.setUsername("unverified");
+        registerRequest.setEmail(email);
+        registerRequest.setPassword("Password123!");
+        restTemplate.postForEntity("/api/auth/register", registerRequest, RegisterResponse.class);
+
+        LoginRequest loginRequest = new LoginRequest();
+        loginRequest.setEmail(email);
+        loginRequest.setPassword("Password123!");
+
+        ResponseEntity<ErrorResponse> response =
+                restTemplate.postForEntity("/api/auth/login", loginRequest, ErrorResponse.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    void verifyEmail_returnsBadRequest_forGarbageToken() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                "/api/auth/verify-email?token=not-a-real-token", String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).containsIgnoringCase("invalid");
+    }
+
+    @Test
+    void resendVerification_succeeds_forAnUnverifiedAccount() {
+        String email = uniqueEmail();
+        UserRequest registerRequest = new UserRequest();
+        registerRequest.setUsername("resendme");
+        registerRequest.setEmail(email);
+        registerRequest.setPassword("Password123!");
+        restTemplate.postForEntity("/api/auth/register", registerRequest, RegisterResponse.class);
+
+        String originalToken = userRepository.findByEmail(email).orElseThrow().getVerificationToken();
+
+        ResendVerificationRequest resendRequest = new ResendVerificationRequest();
+        resendRequest.setEmail(email);
+        ResponseEntity<Void> response =
+                restTemplate.postForEntity("/api/auth/resend-verification", resendRequest, Void.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+
+        String newToken = userRepository.findByEmail(email).orElseThrow().getVerificationToken();
+        assertThat(newToken).isNotBlank().isNotEqualTo(originalToken);
+    }
+
+    @Test
     void register_conflictsWithClearErrorBody_whenEmailAlreadyExists() {
         String email = uniqueEmail();
         UserRequest request = new UserRequest();
@@ -96,7 +168,7 @@ class AuthControllerIntegrationTest {
         request.setEmail(email);
         request.setPassword("Password123!");
 
-        restTemplate.postForEntity("/api/auth/register", request, AuthResponse.class);
+        restTemplate.postForEntity("/api/auth/register", request, RegisterResponse.class);
         ResponseEntity<ErrorResponse> secondAttempt =
                 restTemplate.postForEntity("/api/auth/register", request, ErrorResponse.class);
 
@@ -112,7 +184,7 @@ class AuthControllerIntegrationTest {
         registerRequest.setUsername("wrongpwtest");
         registerRequest.setEmail(email);
         registerRequest.setPassword("CorrectPassword123!");
-        restTemplate.postForEntity("/api/auth/register", registerRequest, AuthResponse.class);
+        restTemplate.postForEntity("/api/auth/register", registerRequest, RegisterResponse.class);
 
         LoginRequest loginRequest = new LoginRequest();
         loginRequest.setEmail(email);

@@ -11,6 +11,7 @@ import com.platform.analytics.entity.SocialAccount;
 import com.platform.analytics.exception.BadRequestException;
 import com.platform.analytics.exception.ResourceNotFoundException;
 import com.platform.analytics.mapper.SocialAccountMapper;
+import com.platform.analytics.repository.AnalyticsRepository;
 import com.platform.analytics.repository.SocialAccountRepository;
 import com.platform.analytics.service.AnalyticsSyncService;
 import com.platform.analytics.service.SocialAccountService;
@@ -30,6 +31,7 @@ import java.util.UUID;
 public class SocialAccountServiceImpl implements SocialAccountService {
 
     private final SocialAccountRepository socialAccountRepository;
+    private final AnalyticsRepository analyticsRepository;
     private final SocialAccountMapper socialAccountMapper;
     private final PlatformValidator platformValidator;
     private final AnalyticsSyncService analyticsSyncService;
@@ -134,6 +136,9 @@ public class SocialAccountServiceImpl implements SocialAccountService {
     @Transactional
     public void disconnectAccount(UUID userId, UUID accountId) {
         SocialAccount account = findAccountOrThrow(userId, accountId);
+        // Analytics rows hold a NOT NULL FK to this account - must go first or
+        // the delete below fails with a foreign key violation.
+        analyticsRepository.deleteBySocialAccountId(accountId);
         socialAccountRepository.delete(account);
         log.info("Disconnected account {} for user {}", accountId, userId);
     }

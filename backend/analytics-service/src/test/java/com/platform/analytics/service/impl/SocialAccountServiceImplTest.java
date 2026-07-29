@@ -9,6 +9,7 @@ import com.platform.analytics.entity.SocialAccount;
 import com.platform.analytics.exception.BadRequestException;
 import com.platform.analytics.exception.ResourceNotFoundException;
 import com.platform.analytics.mapper.SocialAccountMapper;
+import com.platform.analytics.repository.AnalyticsRepository;
 import com.platform.analytics.repository.SocialAccountRepository;
 import com.platform.analytics.service.AnalyticsSyncService;
 import com.platform.analytics.validator.PlatformValidator;
@@ -34,6 +35,9 @@ class SocialAccountServiceImplTest {
 
     @Mock
     private SocialAccountRepository socialAccountRepository;
+
+    @Mock
+    private AnalyticsRepository analyticsRepository;
 
     @Mock
     private SocialAccountMapper socialAccountMapper;
@@ -151,6 +155,11 @@ class SocialAccountServiceImplTest {
 
         socialAccountService.disconnectAccount(userId, accountId);
 
+        // Analytics rows must be cleared first - the account row has a NOT
+        // NULL FK from analytics, so deleting it first would fail. See the
+        // regression this test guards against: disconnect used to throw
+        // a foreign key violation for any account with generated analytics.
+        verify(analyticsRepository).deleteBySocialAccountId(accountId);
         verify(socialAccountRepository).delete(account);
     }
 

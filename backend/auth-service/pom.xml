@@ -71,6 +71,12 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
+        <!-- Mail (real email verification sending via SMTP) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
         <!-- JWT (for token generation - we'll use this later) -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
