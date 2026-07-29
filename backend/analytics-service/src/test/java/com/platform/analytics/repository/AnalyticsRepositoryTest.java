@@ -1,5 +1,6 @@
 package com.platform.analytics.repository;
 
+import com.platform.analytics.config.JpaAuditingConfig;
 import com.platform.analytics.constant.Platform;
 import com.platform.analytics.entity.Analytics;
 import com.platform.analytics.entity.SocialAccount;
@@ -7,6 +8,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.LocalDate;
@@ -17,7 +19,15 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * {@code @DataJpaTest} only auto-configures JPA infrastructure - it does not
+ * component-scan arbitrary {@code @Configuration} classes, so
+ * {@link JpaAuditingConfig}'s {@code @EnableJpaAuditing} must be imported
+ * explicitly or {@code @CreatedDate}/{@code @LastModifiedDate} never fire and
+ * the not-null {@code created_at} column insert fails.
+ */
 @DataJpaTest
+@Import(JpaAuditingConfig.class)
 @ActiveProfiles("test")
 class AnalyticsRepositoryTest {
 
