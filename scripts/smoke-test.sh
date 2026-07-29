@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
 # Automated cross-service round-trip smoke test, run against a live stack
 # (docker compose up) through the public gateway. Exercises the exact flow
-# that was previously only ever verified by hand: register -> login ->
-# connect an account -> the resulting notification -> generate a report ->
-# list reports. Exits non-zero on the first failed assertion.
+# that was previously only ever verified by hand: connect an account -> the
+# resulting notification -> generate a report -> list reports. Exits
+# non-zero on the first failed assertion.
 #
-# Usage: BASE_URL=http://localhost:8080 ./scripts/smoke-test.sh
+# Identity is now fully delegated to Supabase Auth (the frontend talks to
+# it directly) - this script has no real Supabase account to log in with in
+# CI, so it generates its own Supabase-shaped JWT signed with the same
+# SUPABASE_JWT_SECRET the stack was started with. That's exactly what Auth
+# Service's /validate endpoint checks; it has no way to tell this apart
+# from a token Supabase actually issued.
+#
+# Usage: BASE_URL=http://localhost:8080 SUPABASE_JWT_SECRET=... ./scripts/smoke-test.sh
 set -uo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:8080}"
+: "${SUPABASE_JWT_SECRET:?Set SUPABASE_JWT_SECRET (must match what the stack was started with)}"
 FAILURES=0
-
-extract() {
-    # extract <json> <field-name> - naive but sufficient for this flat,
-    # controlled response shape (no nested objects sharing a field name).
-    echo "$1" | sed -n "s/.*\"$2\":\"\{0,1\}\([^\",}]*\)\"\{0,1\}.*/\1/p" | head -1
-}
 
 assert_eq() {
     local description="$1" expected="$2" actual="$3"
@@ -37,9 +39,28 @@ assert_contains() {
     fi
 }
 
+b64url() {
+    openssl base64 -e -A | tr '+/' '-_' | tr -d '='
+}
+
+make_supabase_token() {
+    local user_id="$1" email="$2" secret="${3:-$SUPABASE_JWT_SECRET}"
+    local header='{"alg":"HS256","typ":"JWT"}'
+    local iat exp payload header_b64 payload_b64 signing_input signature
+    iat=$(date +%s)
+    exp=$((iat + 3600))
+    payload="{\"sub\":\"$user_id\",\"email\":\"$email\",\"role\":\"authenticated\",\"iat\":$iat,\"exp\":$exp}"
+    header_b64=$(printf '%s' "$header" | b64url)
+    payload_b64=$(printf '%s' "$payload" | b64url)
+    signing_input="${header_b64}.${payload_b64}"
+    signature=$(printf '%s' "$signing_input" | openssl dgst -sha256 -hmac "$secret" -binary | b64url)
+    echo "${signing_input}.${signature}"
+}
+
 echo "=== Smoke test against $BASE_URL ==="
 RUN_ID="$(date +%s)-$RANDOM"
 EMAIL="smoketest-$RUN_ID@example.com"
+USER_ID="$(python3 -c 'import uuid; print(uuid.uuid4())')"
 # Unique per run, not just the email: uk_platform_account_id is a GLOBAL
 # constraint (platform + account_id, not scoped per user - see the fix for
 # this exact class of bug), so a fixed accountId would spuriously fail on
@@ -48,44 +69,11 @@ EMAIL="smoketest-$RUN_ID@example.com"
 # local runs.
 ACCOUNT_ID="yt-smoketest-$RUN_ID"
 
-echo "--- register (starts unverified, no session token yet) ---"
-REGISTER_BODY=$(mktemp)
-REGISTER_STATUS=$(curl -s -o "$REGISTER_BODY" -w "%{http_code}" -X POST "$BASE_URL/api/auth/register" \
-    -H "Content-Type: application/json" \
-    -d "{\"username\":\"smoketest\",\"email\":\"$EMAIL\",\"password\":\"Password123!\"}")
-REGISTER_RESPONSE=$(cat "$REGISTER_BODY"); rm -f "$REGISTER_BODY"
-assert_eq "register returns 200" "200" "$REGISTER_STATUS"
-assert_contains "register response reports emailVerified false" "$REGISTER_RESPONSE" "\"emailVerified\":false"
-
-echo "--- login is blocked before verification ---"
-BLOCKED_LOGIN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/auth/login" \
-    -H "Content-Type: application/json" \
-    -d "{\"email\":\"$EMAIL\",\"password\":\"Password123!\"}")
-assert_eq "login before verification returns 403" "403" "$BLOCKED_LOGIN_STATUS"
-
-echo "--- verify email (token pulled directly from Postgres - no real mailbox in CI) ---"
-VERIFICATION_TOKEN=$(docker compose exec -T postgres psql -U "${POSTGRES_USER:-audience}" -d "${POSTGRES_DB:-audienceinsights}" -t -A \
-    -c "SELECT verification_token FROM users WHERE email='$EMAIL';" | tr -d '\r')
-if [ -z "$VERIFICATION_TOKEN" ]; then
-    echo "  FAIL could not read verification_token from the database, cannot continue"
-    exit 1
-fi
-VERIFY_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/auth/verify-email?token=$VERIFICATION_TOKEN")
-assert_eq "verify-email returns 200" "200" "$VERIFY_STATUS"
-
-echo "--- login (now that email is verified) ---"
-LOGIN_BODY=$(mktemp)
-LOGIN_STATUS=$(curl -s -o "$LOGIN_BODY" -w "%{http_code}" -X POST "$BASE_URL/api/auth/login" \
-    -H "Content-Type: application/json" \
-    -d "{\"email\":\"$EMAIL\",\"password\":\"Password123!\"}")
-LOGIN_RESPONSE=$(cat "$LOGIN_BODY"); rm -f "$LOGIN_BODY"
-assert_eq "login returns 200" "200" "$LOGIN_STATUS"
-TOKEN=$(extract "$LOGIN_RESPONSE" "token")
-if [ -z "$TOKEN" ]; then
-    echo "  FAIL no token in login response, cannot continue: $LOGIN_RESPONSE"
-    exit 1
-fi
-echo "  OK   received a token"
+echo "--- generate a Supabase-shaped test token and confirm Auth Service validates it ---"
+TOKEN=$(make_supabase_token "$USER_ID" "$EMAIL")
+VALIDATE_RESPONSE=$(curl -s "$BASE_URL/api/auth/validate" -H "Authorization: Bearer $TOKEN")
+assert_contains "validate reports valid:true" "$VALIDATE_RESPONSE" "\"valid\":true"
+assert_contains "validate echoes back the test user id" "$VALIDATE_RESPONSE" "$USER_ID"
 
 echo "--- connect a mock YouTube account ---"
 CONNECT_BODY=$(mktemp)
@@ -129,14 +117,10 @@ INTERNAL_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/inte
     -d '{"userId":"00000000-0000-0000-0000-000000000000","type":"ACCOUNT_CONNECTED","message":"should not work"}')
 assert_eq "internal endpoint returns 404 via gateway" "404" "$INTERNAL_STATUS"
 
-echo "--- wrong password returns a clean error, not a stack trace ---"
-WRONGPW_BODY=$(mktemp)
-WRONGPW_STATUS=$(curl -s -o "$WRONGPW_BODY" -w "%{http_code}" -X POST "$BASE_URL/api/auth/login" \
-    -H "Content-Type: application/json" \
-    -d "{\"email\":\"$EMAIL\",\"password\":\"WrongPassword!\"}")
-WRONGPW_RESPONSE=$(cat "$WRONGPW_BODY"); rm -f "$WRONGPW_BODY"
-assert_eq "wrong password returns 401" "401" "$WRONGPW_STATUS"
-assert_contains "wrong password error body is clean JSON" "$WRONGPW_RESPONSE" "Invalid email or password"
+echo "--- a token signed with the wrong secret is rejected ---"
+FORGED_TOKEN=$(make_supabase_token "$USER_ID" "$EMAIL" "a-completely-different-secret")
+FORGED_RESPONSE=$(curl -s "$BASE_URL/api/auth/validate" -H "Authorization: Bearer $FORGED_TOKEN")
+assert_contains "forged token reports valid:false" "$FORGED_RESPONSE" "\"valid\":false"
 
 echo ""
 if [ "$FAILURES" -eq 0 ]; then

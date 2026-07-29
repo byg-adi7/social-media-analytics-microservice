@@ -50,9 +50,17 @@ public class JwtUtil {
         return parseClaims(token).get("role", String.class);
     }
 
+    /**
+     * A token can be cryptographically genuine (correctly signed, not
+     * expired) but still carry a malformed `sub` claim - e.g. missing or
+     * not a valid UUID. Checking that here, not just signature/expiry,
+     * means callers can trust extractUserId() below will never throw for
+     * anything this method already reported as valid.
+     */
     public boolean isTokenValid(String token) {
         try {
-            parseClaims(token);
+            Claims claims = parseClaims(token);
+            UUID.fromString(claims.getSubject());
             return true;
         } catch (Exception e) {
             return false;

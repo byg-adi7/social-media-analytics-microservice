@@ -53,8 +53,7 @@ jobs:
             echo "POSTGRES_USER=audience"
             echo "POSTGRES_PASSWORD=$(openssl rand -base64 32)"
             echo "POSTGRES_DB=audienceinsights"
-            echo "JWT_SECRET=$(openssl rand -base64 32)"
-            echo "JWT_EXPIRATION_MS=86400000"
+            echo "SUPABASE_JWT_SECRET=$(openssl rand -base64 32)"
             echo "INTERNAL_API_KEY=$(openssl rand -base64 32)"
             echo "OAUTH_STATE_SECRET=$(openssl rand -base64 32)"
           } > .env
@@ -80,7 +79,9 @@ jobs:
           exit 1
 
       - name: Run the smoke test
-        run: BASE_URL=http://localhost:8080 bash scripts/smoke-test.sh
+        run: |
+          SUPABASE_JWT_SECRET=$(grep '^SUPABASE_JWT_SECRET=' .env | cut -d= -f2-)
+          BASE_URL=http://localhost:8080 SUPABASE_JWT_SECRET="$SUPABASE_JWT_SECRET" bash scripts/smoke-test.sh
 
       - name: Dump container logs on failure
         if: failure()
