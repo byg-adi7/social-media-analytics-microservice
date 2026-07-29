@@ -1,36 +1,33 @@
 package com.audienceinsights.audience_insights_auth_service.Controller;
 
-import com.audienceinsights.audience_insights_auth_service.Dto.AuthResponse;
-import com.audienceinsights.audience_insights_auth_service.Dto.LoginRequest;
-import com.audienceinsights.audience_insights_auth_service.Dto.RegisterResponse;
-import com.audienceinsights.audience_insights_auth_service.Dto.ResendVerificationRequest;
 import com.audienceinsights.audience_insights_auth_service.Dto.TokenValidationResponse;
-import com.audienceinsights.audience_insights_auth_service.Dto.UserRequest;
-import com.audienceinsights.audience_insights_auth_service.Entity.User;
 import com.audienceinsights.audience_insights_auth_service.Exception.ErrorResponse;
-import com.audienceinsights.audience_insights_auth_service.Repository.UserRepository;
-import org.junit.jupiter.api.BeforeEach;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.test.context.ActiveProfiles;
 
+import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
+import java.util.Date;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Exercises real HTTP requests against the full application context (real
- * H2-backed JPA persistence, real BCrypt hashing, real JWT
- * generation/parsing) - not mocked. This is the automated equivalent of the
- * manual curl-based verification this service previously only got by hand.
+ * Exercises real HTTP requests against the full application context. Since
+ * identity is now entirely delegated to Supabase Auth, this service has no
+ * register/login of its own to test - only that /validate correctly
+ * verifies a token shaped and signed exactly like Supabase issues one.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
@@ -39,179 +36,74 @@ class AuthControllerIntegrationTest {
     @Autowired
     private TestRestTemplate restTemplate;
 
-    @Autowired
-    private UserRepository userRepository;
+    @Value("${supabase.jwt-secret}")
+    private String supabaseJwtSecret;
 
-    @BeforeEach
-    void disableRequestStreaming() {
-        // The JDK's default HttpURLConnection-based request factory can't
-        // replay a streamed request body when the server responds 401/409
-        // (it throws HttpRetryException instead of just returning the
-        // response), which every "expect an error status" test below
-        // relies on. Buffering the body instead of streaming it avoids that
-        // - a test-client quirk, not an application bug.
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setOutputStreaming(false);
-        restTemplate.getRestTemplate().setRequestFactory(factory);
+    private String supabaseStyleToken(UUID userId, String email, long expiresInMillis) {
+        SecretKey key = Keys.hmacShaKeyFor(supabaseJwtSecret.getBytes(StandardCharsets.UTF_8));
+        return Jwts.builder()
+                .subject(userId.toString())
+                .claim("email", email)
+                .claim("role", "authenticated")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + expiresInMillis))
+                .signWith(key)
+                .compact();
     }
 
     @Test
-    void register_thenVerify_thenLogin_thenValidate_fullRoundTrip() {
-        String email = uniqueEmail();
-        UserRequest registerRequest = new UserRequest();
-        registerRequest.setUsername("roundtrip");
-        registerRequest.setEmail(email);
-        registerRequest.setPassword("Password123!");
-
-        ResponseEntity<RegisterResponse> registerResponse =
-                restTemplate.postForEntity("/api/auth/register", registerRequest, RegisterResponse.class);
-
-        assertThat(registerResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(registerResponse.getBody()).isNotNull();
-        assertThat(registerResponse.getBody().getEmail()).isEqualTo(email);
-        assertThat(registerResponse.getBody().isEmailVerified()).isFalse();
-
-        // No real mail server in tests - pull the token straight from the DB,
-        // exactly like a real user copying it out of the email they received.
-        User persisted = userRepository.findByEmail(email).orElseThrow();
-        String verificationToken = persisted.getVerificationToken();
-        assertThat(verificationToken).isNotBlank();
-
-        LoginRequest loginRequest = new LoginRequest();
-        loginRequest.setEmail(email);
-        loginRequest.setPassword("Password123!");
-
-        ResponseEntity<ErrorResponse> blockedLogin =
-                restTemplate.postForEntity("/api/auth/login", loginRequest, ErrorResponse.class);
-        assertThat(blockedLogin.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-        assertThat(blockedLogin.getBody().getMessage()).containsIgnoringCase("verify your email");
-
-        ResponseEntity<String> verifyResponse = restTemplate.getForEntity(
-                "/api/auth/verify-email?token=" + verificationToken, String.class);
-        assertThat(verifyResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(verifyResponse.getBody()).containsIgnoringCase("verified");
-
-        ResponseEntity<AuthResponse> loginResponse =
-                restTemplate.postForEntity("/api/auth/login", loginRequest, AuthResponse.class);
-
-        assertThat(loginResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
-        String token = loginResponse.getBody().getToken();
-        assertThat(token).isNotBlank();
+    void validate_returnsValidTrueWithClaims_forAGenuineSupabaseToken() {
+        UUID userId = UUID.randomUUID();
+        String token = supabaseStyleToken(userId, "someone@example.com", 60_000);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(token);
-        ResponseEntity<TokenValidationResponse> validateResponse = restTemplate.exchange(
+        ResponseEntity<TokenValidationResponse> response = restTemplate.exchange(
                 "/api/auth/validate", HttpMethod.GET, new HttpEntity<>(headers), TokenValidationResponse.class);
 
-        assertThat(validateResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(validateResponse.getBody().isValid()).isTrue();
-        assertThat(validateResponse.getBody().getEmail()).isEqualTo(email);
-        assertThat(validateResponse.getBody().getRole()).isEqualTo("USER");
-        assertThat(validateResponse.getBody().getUserId()).isNotNull();
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody().isValid()).isTrue();
+        assertThat(response.getBody().getUserId()).isEqualTo(userId);
+        assertThat(response.getBody().getEmail()).isEqualTo("someone@example.com");
+        assertThat(response.getBody().getRole()).isEqualTo("authenticated");
     }
 
     @Test
-    void login_returnsForbidden_whenEmailNotYetVerified() {
-        String email = uniqueEmail();
-        UserRequest registerRequest = new UserRequest();
-        registerRequest.setUsername("unverified");
-        registerRequest.setEmail(email);
-        registerRequest.setPassword("Password123!");
-        restTemplate.postForEntity("/api/auth/register", registerRequest, RegisterResponse.class);
+    void validate_returnsValidFalse_forAnExpiredToken() {
+        String token = supabaseStyleToken(UUID.randomUUID(), "expired@example.com", -60_000);
 
-        LoginRequest loginRequest = new LoginRequest();
-        loginRequest.setEmail(email);
-        loginRequest.setPassword("Password123!");
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+        ResponseEntity<TokenValidationResponse> response = restTemplate.exchange(
+                "/api/auth/validate", HttpMethod.GET, new HttpEntity<>(headers), TokenValidationResponse.class);
 
-        ResponseEntity<ErrorResponse> response =
-                restTemplate.postForEntity("/api/auth/login", loginRequest, ErrorResponse.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody().isValid()).isFalse();
     }
 
     @Test
-    void verifyEmail_returnsBadRequest_forGarbageToken() {
-        ResponseEntity<String> response = restTemplate.getForEntity(
-                "/api/auth/verify-email?token=not-a-real-token", String.class);
+    void validate_returnsValidFalse_forATokenSignedWithTheWrongSecret() {
+        SecretKey wrongKey = Keys.hmacShaKeyFor("a-completely-different-secret-not-used-by-this-service".getBytes(StandardCharsets.UTF_8));
+        String token = Jwts.builder()
+                .subject(UUID.randomUUID().toString())
+                .claim("email", "forged@example.com")
+                .claim("role", "authenticated")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 60_000))
+                .signWith(wrongKey)
+                .compact();
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody()).containsIgnoringCase("invalid");
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+        ResponseEntity<TokenValidationResponse> response = restTemplate.exchange(
+                "/api/auth/validate", HttpMethod.GET, new HttpEntity<>(headers), TokenValidationResponse.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody().isValid()).isFalse();
     }
 
     @Test
-    void resendVerification_succeeds_forAnUnverifiedAccount() {
-        String email = uniqueEmail();
-        UserRequest registerRequest = new UserRequest();
-        registerRequest.setUsername("resendme");
-        registerRequest.setEmail(email);
-        registerRequest.setPassword("Password123!");
-        restTemplate.postForEntity("/api/auth/register", registerRequest, RegisterResponse.class);
-
-        String originalToken = userRepository.findByEmail(email).orElseThrow().getVerificationToken();
-
-        ResendVerificationRequest resendRequest = new ResendVerificationRequest();
-        resendRequest.setEmail(email);
-        ResponseEntity<Void> response =
-                restTemplate.postForEntity("/api/auth/resend-verification", resendRequest, Void.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
-
-        String newToken = userRepository.findByEmail(email).orElseThrow().getVerificationToken();
-        assertThat(newToken).isNotBlank().isNotEqualTo(originalToken);
-    }
-
-    @Test
-    void register_conflictsWithClearErrorBody_whenEmailAlreadyExists() {
-        String email = uniqueEmail();
-        UserRequest request = new UserRequest();
-        request.setUsername("dupe");
-        request.setEmail(email);
-        request.setPassword("Password123!");
-
-        restTemplate.postForEntity("/api/auth/register", request, RegisterResponse.class);
-        ResponseEntity<ErrorResponse> secondAttempt =
-                restTemplate.postForEntity("/api/auth/register", request, ErrorResponse.class);
-
-        assertThat(secondAttempt.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-        assertThat(secondAttempt.getBody()).isNotNull();
-        assertThat(secondAttempt.getBody().getMessage()).containsIgnoringCase("already registered");
-    }
-
-    @Test
-    void login_returnsCleanUnauthorized_withNoStackTrace_onWrongPassword() {
-        String email = uniqueEmail();
-        UserRequest registerRequest = new UserRequest();
-        registerRequest.setUsername("wrongpwtest");
-        registerRequest.setEmail(email);
-        registerRequest.setPassword("CorrectPassword123!");
-        restTemplate.postForEntity("/api/auth/register", registerRequest, RegisterResponse.class);
-
-        LoginRequest loginRequest = new LoginRequest();
-        loginRequest.setEmail(email);
-        loginRequest.setPassword("WrongPassword!");
-
-        ResponseEntity<ErrorResponse> response =
-                restTemplate.postForEntity("/api/auth/login", loginRequest, ErrorResponse.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
-        assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().getMessage()).containsIgnoringCase("invalid email or password");
-    }
-
-    @Test
-    void login_returnsUnauthorized_forNonexistentEmail() {
-        LoginRequest loginRequest = new LoginRequest();
-        loginRequest.setEmail(uniqueEmail());
-        loginRequest.setPassword("whatever123");
-
-        ResponseEntity<ErrorResponse> response =
-                restTemplate.postForEntity("/api/auth/login", loginRequest, ErrorResponse.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
-    }
-
-    @Test
-    void validate_reportsInvalid_forAGarbageToken() {
+    void validate_returnsValidFalse_forAGarbageToken() {
         HttpHeaders headers = new HttpHeaders();
         headers.set(HttpHeaders.AUTHORIZATION, "Bearer not-a-real-jwt");
 
@@ -223,19 +115,10 @@ class AuthControllerIntegrationTest {
     }
 
     @Test
-    void register_rejectsInvalidInput_withBadRequest() {
-        UserRequest request = new UserRequest();
-        request.setUsername("");
-        request.setEmail("not-an-email");
-        request.setPassword("123");
-
-        ResponseEntity<String> response =
-                restTemplate.postForEntity("/api/auth/register", request, String.class);
+    void validate_returnsBadRequest_whenAuthorizationHeaderIsMissing() {
+        ResponseEntity<ErrorResponse> response = restTemplate.exchange(
+                "/api/auth/validate", HttpMethod.GET, HttpEntity.EMPTY, ErrorResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-    }
-
-    private String uniqueEmail() {
-        return "roundtrip-" + UUID.randomUUID() + "@example.com";
     }
 }

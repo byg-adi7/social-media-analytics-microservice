@@ -32,11 +32,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-audienceinsights}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-audience}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env - see .env.example}
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env - see .env.example}
-      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
-      MAIL_USERNAME: ${MAIL_USERNAME:-}
-      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
-      APP_BASE_URL: ${APP_BASE_URL:-http://172.24.145.226:8080}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:?Set SUPABASE_JWT_SECRET in .env - see .env.example}
       SERVER_PORT: 8001
     ports:
       - "8001:8001"
