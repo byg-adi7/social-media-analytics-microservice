@@ -14,12 +14,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -138,5 +140,35 @@ class AccountControllerTest {
     void disconnectAccount_returns204() throws Exception {
         mockMvc.perform(delete("/api/accounts/{id}", accountId))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void importCsv_missingAccountNameParam_returns400_notServerError() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "data.csv", "text/csv", "date,followers,views,likes,comments,shares\n2026-07-01,1,1,1,1,1\n"
+                        .getBytes(StandardCharsets.UTF_8));
+
+        // Regression test: a missing @RequestParam used to fall through to
+        // the generic Exception handler and return 500 instead of 400 -
+        // see GlobalExceptionHandler's MissingServletRequestParameterException handler.
+        mockMvc.perform(multipart("/api/accounts/import-csv")
+                        .file(file)
+                        .param("platform", "TWITTER"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("BAD_REQUEST"));
+    }
+
+    @Test
+    void importCsv_blankAccountNameParam_returns400() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "data.csv", "text/csv", "date,followers,views,likes,comments,shares\n2026-07-01,1,1,1,1,1\n"
+                        .getBytes(StandardCharsets.UTF_8));
+
+        mockMvc.perform(multipart("/api/accounts/import-csv")
+                        .file(file)
+                        .param("platform", "TWITTER")
+                        .param("accountName", ""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
     }
 }

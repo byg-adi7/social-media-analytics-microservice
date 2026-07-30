@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Pageable;
@@ -20,6 +21,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -30,6 +32,7 @@ import java.util.UUID;
  * on-demand syncing of social media accounts.
  */
 @Slf4j
+@Validated
 @RestController
 @RequestMapping("/api/accounts")
 @RequiredArgsConstructor
@@ -102,7 +105,7 @@ public class AccountController {
                     + "CSV columns (any order): date,followers,views,likes,comments,shares.")
     public CsvImportResponse importCsv(
             @RequestParam Platform platform,
-            @RequestParam String accountName,
+            @RequestParam @NotBlank(message = "accountName must not be blank") String accountName,
             @RequestPart("file") MultipartFile file) {
         log.info("Incoming request: import CSV, platform={}", platform);
         UUID userId = SecurityContextUtil.getCurrentUserId();
