@@ -1,5 +1,6 @@
 package com.platform.notification.controller;
 
+import com.platform.analytics.dto.response.PagedResponse;
 import com.platform.notification.dto.request.CreateReportRequest;
 import com.platform.notification.dto.response.ReportResponse;
 import com.platform.notification.dto.response.ReportSummaryResponse;
@@ -10,6 +11,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -19,7 +23,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -41,10 +44,12 @@ public class ReportController {
     }
 
     @GetMapping
-    @Operation(summary = "List the current user's generated reports, most recent first")
-    public List<ReportSummaryResponse> getReports() {
+    @Operation(summary = "List the current user's generated reports, most recent first",
+            description = "Paginated: pass page/size query params (defaults: page=0, size=20).")
+    public PagedResponse<ReportSummaryResponse> getReports(
+            @PageableDefault(size = 20, sort = "generatedAt", direction = Sort.Direction.DESC) Pageable pageable) {
         UUID userId = SecurityContextUtil.getCurrentUserId();
-        return reportService.getForUser(userId);
+        return reportService.getForUser(userId, pageable);
     }
 
     @GetMapping("/{reportId}")

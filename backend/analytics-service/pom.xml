@@ -97,6 +97,15 @@
             <version>1.11.0</version>
         </dependency>
 
+        <!-- Rate limiting (in-memory token bucket - appropriate for a single-
+             instance deployment; a distributed store like Redis would only
+             be needed if this were ever horizontally scaled). -->
+        <dependency>
+            <groupId>com.bucket4j</groupId>
+            <artifactId>bucket4j_jdk17-core</artifactId>
+            <version>8.19.0</version>
+        </dependency>
+
         <!-- PostgreSQL -->
         <dependency>
             <groupId>org.postgresql</groupId>

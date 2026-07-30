@@ -54,6 +54,11 @@ facebook:
 oauth:
   state-secret: test-secret
 
+# Disabled so test request volume never depends on incidental headroom
+# under the default capacity - tests aren't exercising rate-limit behavior.
+rate-limit:
+  enabled: false
+
 logging:
   level:
     root: WARN

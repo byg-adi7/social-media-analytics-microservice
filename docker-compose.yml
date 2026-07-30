@@ -34,6 +34,9 @@ services:
       SERVER_PORT: 8002
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:?Set SUPABASE_JWT_SECRET in .env - see .env.example}
       OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET:?Set OAUTH_STATE_SECRET in .env - see .env.example}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      RATE_LIMIT_CAPACITY: ${RATE_LIMIT_CAPACITY:-120}
+      RATE_LIMIT_REFILL_PERIOD_SECONDS: ${RATE_LIMIT_REFILL_PERIOD_SECONDS:-60}
       # Real platform OAuth credentials - all optional. Any left unset keep
       # that platform's integration disabled and served from mock data (see
       # README's "Enabling real platform integrations" section).

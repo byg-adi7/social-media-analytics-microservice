@@ -4,6 +4,7 @@ import com.platform.analytics.constant.AccountConnectionType;
 import com.platform.analytics.constant.Platform;
 import com.platform.analytics.dto.request.ConnectAccountRequest;
 import com.platform.analytics.dto.response.CsvImportResponse;
+import com.platform.analytics.dto.response.PagedResponse;
 import com.platform.analytics.dto.response.SocialAccountResponse;
 import com.platform.analytics.entity.Analytics;
 import com.platform.analytics.entity.SocialAccount;
@@ -21,6 +22,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.nio.charset.StandardCharsets;
@@ -147,6 +151,23 @@ class SocialAccountServiceImplTest {
 
         assertThatThrownBy(() -> socialAccountService.getAccountById(userId, accountId))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getAccounts_returnsPagedResponse_withCorrectMetadata() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(socialAccountRepository.findAllByUserId(userId, pageable))
+                .thenReturn(new PageImpl<>(java.util.List.of(account), pageable, 1));
+        when(socialAccountMapper.toResponse(account)).thenReturn(SocialAccountResponse.builder().id(accountId).build());
+
+        PagedResponse<SocialAccountResponse> result = socialAccountService.getAccounts(userId, pageable);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).getId()).isEqualTo(accountId);
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getTotalPages()).isEqualTo(1);
+        assertThat(result.getPage()).isZero();
+        assertThat(result.getSize()).isEqualTo(20);
     }
 
     @Test

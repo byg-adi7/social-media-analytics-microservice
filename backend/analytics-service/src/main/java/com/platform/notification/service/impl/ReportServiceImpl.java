@@ -2,6 +2,7 @@ package com.platform.notification.service.impl;
 
 import com.platform.analytics.dto.request.AnalyticsQueryRequest;
 import com.platform.analytics.dto.response.AnalyticsSummaryResponse;
+import com.platform.analytics.dto.response.PagedResponse;
 import com.platform.analytics.dto.response.PlatformMetricsResponse;
 import com.platform.analytics.exception.BadRequestException;
 import com.platform.analytics.exception.ExternalApiException;
@@ -19,6 +20,7 @@ import com.platform.notification.service.ReportService;
 import com.platform.notification.util.CsvReportFormatter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -100,8 +102,8 @@ public class ReportServiceImpl implements ReportService {
     }
 
     @Override
-    public List<ReportSummaryResponse> getForUser(UUID userId) {
-        return reportRepository.findAllByUserIdOrderByGeneratedAtDesc(userId).stream()
+    public PagedResponse<ReportSummaryResponse> getForUser(UUID userId, Pageable pageable) {
+        return PagedResponse.of(reportRepository.findAllByUserId(userId, pageable)
                 .map(r -> ReportSummaryResponse.builder()
                         .id(r.getId())
                         .reportType(r.getReportType())
@@ -109,8 +111,7 @@ public class ReportServiceImpl implements ReportService {
                         .endPeriod(r.getEndPeriod())
                         .status(r.getStatus())
                         .generatedAt(r.getGeneratedAt())
-                        .build())
-                .toList();
+                        .build()));
     }
 
     @Override

@@ -1,5 +1,6 @@
 package com.platform.notification.service.impl;
 
+import com.platform.analytics.dto.response.PagedResponse;
 import com.platform.notification.constant.NotificationType;
 import com.platform.notification.dto.response.NotificationResponse;
 import com.platform.notification.entity.Notification;
@@ -8,11 +9,11 @@ import com.platform.notification.repository.NotificationRepository;
 import com.platform.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -39,10 +40,8 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     @Override
-    public List<NotificationResponse> getForUser(UUID userId) {
-        return notificationRepository.findAllByUserIdOrderByCreatedAtDesc(userId).stream()
-                .map(this::toResponse)
-                .toList();
+    public PagedResponse<NotificationResponse> getForUser(UUID userId, Pageable pageable) {
+        return PagedResponse.of(notificationRepository.findAllByUserId(userId, pageable).map(this::toResponse));
     }
 
     @Override

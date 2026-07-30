@@ -5,6 +5,7 @@ import com.platform.analytics.constant.Platform;
 import com.platform.analytics.dto.request.ConnectAccountRequest;
 import com.platform.analytics.dto.request.UpdateAccountRequest;
 import com.platform.analytics.dto.response.CsvImportResponse;
+import com.platform.analytics.dto.response.PagedResponse;
 import com.platform.analytics.dto.response.SocialAccountResponse;
 import com.platform.analytics.entity.Analytics;
 import com.platform.analytics.entity.SocialAccount;
@@ -22,6 +23,7 @@ import com.platform.notification.constant.NotificationType;
 import com.platform.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -103,8 +105,8 @@ public class SocialAccountServiceImpl implements SocialAccountService {
     }
 
     @Override
-    public List<SocialAccountResponse> getAccounts(UUID userId) {
-        return socialAccountMapper.toResponseList(socialAccountRepository.findAllByUserId(userId));
+    public PagedResponse<SocialAccountResponse> getAccounts(UUID userId, Pageable pageable) {
+        return PagedResponse.of(socialAccountRepository.findAllByUserId(userId, pageable).map(socialAccountMapper::toResponse));
     }
 
     @Override

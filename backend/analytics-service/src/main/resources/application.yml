@@ -73,6 +73,12 @@ supabase:
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
 
+# In-memory per-user (or per-IP for unauthenticated requests) token bucket.
+rate-limit:
+  enabled: ${RATE_LIMIT_ENABLED:true}
+  capacity: ${RATE_LIMIT_CAPACITY:120}
+  refill-period-seconds: ${RATE_LIMIT_REFILL_PERIOD_SECONDS:60}
+
 # Shared OAuth settings used by every platform's connect flow (not specific
 # to any one platform's own client-id/secret/scopes, which live under that
 # platform's own config block, e.g. youtube.*).

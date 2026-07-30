@@ -3,6 +3,7 @@ package com.platform.notification.service.impl;
 import com.platform.notification.constant.NotificationType;
 import com.platform.notification.dto.response.NotificationResponse;
 import com.platform.notification.entity.Notification;
+import com.platform.analytics.dto.response.PagedResponse;
 import com.platform.analytics.exception.ResourceNotFoundException;
 import com.platform.notification.repository.NotificationRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,6 +12,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -57,7 +61,7 @@ class NotificationServiceImplTest {
     }
 
     @Test
-    void getForUser_returnsMappedList() {
+    void getForUser_returnsMappedPage() {
         Notification n = Notification.builder()
                 .id(UUID.randomUUID())
                 .userId(userId)
@@ -66,12 +70,15 @@ class NotificationServiceImplTest {
                 .read(false)
                 .createdAt(LocalDateTime.now())
                 .build();
-        when(notificationRepository.findAllByUserIdOrderByCreatedAtDesc(userId)).thenReturn(List.of(n));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(notificationRepository.findAllByUserId(userId, pageable))
+                .thenReturn(new PageImpl<>(List.of(n), pageable, 1));
 
-        List<NotificationResponse> result = notificationService.getForUser(userId);
+        PagedResponse<NotificationResponse> result = notificationService.getForUser(userId, pageable);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getType()).isEqualTo(NotificationType.SYNC_FAILURE);
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getContent().get(0).getType()).isEqualTo(NotificationType.SYNC_FAILURE);
     }
 
     @Test

@@ -2,6 +2,8 @@ package com.platform.analytics.repository;
 
 import com.platform.analytics.constant.Platform;
 import com.platform.analytics.entity.SocialAccount;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,7 +19,7 @@ import java.util.UUID;
 @Repository
 public interface SocialAccountRepository extends JpaRepository<SocialAccount, UUID> {
 
-    List<SocialAccount> findAllByUserId(UUID userId);
+    Page<SocialAccount> findAllByUserId(UUID userId, Pageable pageable);
 
     List<SocialAccount> findAllByUserIdAndActiveTrue(UUID userId);
 

@@ -4,10 +4,11 @@ import com.platform.analytics.constant.Platform;
 import com.platform.analytics.dto.request.ConnectAccountRequest;
 import com.platform.analytics.dto.request.UpdateAccountRequest;
 import com.platform.analytics.dto.response.CsvImportResponse;
+import com.platform.analytics.dto.response.PagedResponse;
 import com.platform.analytics.dto.response.SocialAccountResponse;
+import org.springframework.data.domain.Pageable;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -18,7 +19,7 @@ public interface SocialAccountService {
 
     SocialAccountResponse connectAccount(UUID userId, ConnectAccountRequest request);
 
-    List<SocialAccountResponse> getAccounts(UUID userId);
+    PagedResponse<SocialAccountResponse> getAccounts(UUID userId, Pageable pageable);
 
     SocialAccountResponse getAccountById(UUID userId, UUID accountId);
 

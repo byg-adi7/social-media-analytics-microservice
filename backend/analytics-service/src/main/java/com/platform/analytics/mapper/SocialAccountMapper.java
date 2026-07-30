@@ -7,8 +7,6 @@ import org.mapstruct.Mapping;
 import org.mapstruct.MappingConstants;
 import org.mapstruct.factory.Mappers;
 
-import java.util.List;
-
 /**
  * MapStruct mapper converting between {@link SocialAccount} entities and
  * their DTO representations. Access/refresh tokens are intentionally
@@ -21,6 +19,4 @@ public interface SocialAccountMapper {
 
     @Mapping(target = "id", source = "id")
     SocialAccountResponse toResponse(SocialAccount entity);
-
-    List<SocialAccountResponse> toResponseList(List<SocialAccount> entities);
 }

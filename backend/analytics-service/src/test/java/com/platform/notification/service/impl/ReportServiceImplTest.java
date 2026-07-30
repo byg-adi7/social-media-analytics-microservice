@@ -2,6 +2,7 @@ package com.platform.notification.service.impl;
 
 import com.platform.analytics.constant.Platform;
 import com.platform.analytics.dto.request.AnalyticsQueryRequest;
+import com.platform.analytics.dto.response.PagedResponse;
 import com.platform.analytics.dto.response.PlatformMetricsResponse;
 import com.platform.analytics.exception.BadRequestException;
 import com.platform.analytics.exception.ExternalApiException;
@@ -12,6 +13,7 @@ import com.platform.notification.constant.ReportStatus;
 import com.platform.notification.constant.ReportType;
 import com.platform.notification.dto.request.CreateReportRequest;
 import com.platform.notification.dto.response.ReportResponse;
+import com.platform.notification.dto.response.ReportSummaryResponse;
 import com.platform.notification.entity.Report;
 import com.platform.notification.repository.ReportRepository;
 import com.platform.notification.service.NotificationService;
@@ -21,8 +23,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -104,6 +110,28 @@ class ReportServiceImplTest {
                 .isInstanceOf(BadRequestException.class);
 
         verify(analyticsQueryService, never()).getSummary(any(), any());
+    }
+
+    @Test
+    void getForUser_returnsMappedPagedSummaries() {
+        Report report = Report.builder()
+                .id(UUID.randomUUID())
+                .userId(userId)
+                .reportType(ReportType.PLATFORM_COMPARISON)
+                .startPeriod(LocalDate.of(2026, 1, 1))
+                .endPeriod(LocalDate.of(2026, 1, 31))
+                .status(ReportStatus.COMPLETED)
+                .generatedAt(LocalDateTime.now())
+                .build();
+        Pageable pageable = PageRequest.of(0, 20);
+        when(reportRepository.findAllByUserId(userId, pageable))
+                .thenReturn(new PageImpl<>(List.of(report), pageable, 1));
+
+        PagedResponse<ReportSummaryResponse> result = reportService.getForUser(userId, pageable);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).getStatus()).isEqualTo(ReportStatus.COMPLETED);
+        assertThat(result.getTotalElements()).isEqualTo(1);
     }
 
     @Test

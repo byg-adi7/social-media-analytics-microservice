@@ -3,6 +3,7 @@ package com.platform.analytics.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.platform.analytics.constant.Platform;
 import com.platform.analytics.dto.request.ConnectAccountRequest;
+import com.platform.analytics.dto.response.PagedResponse;
 import com.platform.analytics.dto.response.SocialAccountResponse;
 import com.platform.analytics.security.AuthenticatedUser;
 import com.platform.analytics.service.SocialAccountService;
@@ -50,6 +51,12 @@ class AccountControllerTest {
     // against these requests anyway).
     @MockBean
     private com.platform.analytics.security.JwtUtil jwtUtil;
+
+    // RateLimitFilter (also a Filter, also included in this slice) depends
+    // on RateLimitProperties, a plain @Component this slice doesn't scan -
+    // mock the whole filter for the same reason as jwtUtil above.
+    @MockBean
+    private com.platform.analytics.security.RateLimitFilter rateLimitFilter;
 
     private UUID userId;
     private UUID accountId;
@@ -113,15 +120,18 @@ class AccountControllerTest {
     }
 
     @Test
-    void getAccounts_returnsListOfAccounts() throws Exception {
+    void getAccounts_returnsPagedListOfAccounts() throws Exception {
         SocialAccountResponse response = SocialAccountResponse.builder()
                 .id(accountId).platform(Platform.INSTAGRAM).accountName("My IG").active(true).build();
+        PagedResponse<SocialAccountResponse> page = PagedResponse.<SocialAccountResponse>builder()
+                .content(List.of(response)).page(0).size(20).totalElements(1).totalPages(1).build();
 
-        when(socialAccountService.getAccounts(userId)).thenReturn(List.of(response));
+        when(socialAccountService.getAccounts(eq(userId), any())).thenReturn(page);
 
         mockMvc.perform(get("/api/accounts"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].platform").value("INSTAGRAM"));
+                .andExpect(jsonPath("$.content[0].platform").value("INSTAGRAM"))
+                .andExpect(jsonPath("$.totalElements").value(1));
     }
 
     @Test

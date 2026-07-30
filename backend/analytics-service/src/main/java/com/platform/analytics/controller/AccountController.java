@@ -4,6 +4,7 @@ import com.platform.analytics.constant.Platform;
 import com.platform.analytics.dto.request.ConnectAccountRequest;
 import com.platform.analytics.dto.request.UpdateAccountRequest;
 import com.platform.analytics.dto.response.CsvImportResponse;
+import com.platform.analytics.dto.response.PagedResponse;
 import com.platform.analytics.dto.response.SocialAccountResponse;
 import com.platform.analytics.security.SecurityContextUtil;
 import com.platform.analytics.service.SocialAccountService;
@@ -13,13 +14,15 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -48,11 +51,13 @@ public class AccountController {
     }
 
     @GetMapping
-    @Operation(summary = "List all connected accounts for the current user")
-    public List<SocialAccountResponse> getAccounts() {
+    @Operation(summary = "List all connected accounts for the current user, most recently connected first",
+            description = "Paginated: pass page/size query params (defaults: page=0, size=20).")
+    public PagedResponse<SocialAccountResponse> getAccounts(
+            @PageableDefault(size = 20, sort = "connectedAt", direction = Sort.Direction.DESC) Pageable pageable) {
         log.info("Incoming request: list accounts");
         UUID userId = SecurityContextUtil.getCurrentUserId();
-        return socialAccountService.getAccounts(userId);
+        return socialAccountService.getAccounts(userId, pageable);
     }
 
     @GetMapping("/{id}")

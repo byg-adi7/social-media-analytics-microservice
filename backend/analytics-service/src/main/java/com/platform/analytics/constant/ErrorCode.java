@@ -18,4 +18,5 @@ public final class ErrorCode {
     public static final String ANALYTICS_ERROR = "ANALYTICS_ERROR";
     public static final String EXTERNAL_API_ERROR = "EXTERNAL_API_ERROR";
     public static final String INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR";
+    public static final String TOO_MANY_REQUESTS = "TOO_MANY_REQUESTS";
 }
