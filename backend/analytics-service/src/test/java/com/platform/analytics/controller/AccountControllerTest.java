@@ -1,7 +1,6 @@
 package com.platform.analytics.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.platform.analytics.client.AuthServiceClient;
 import com.platform.analytics.constant.Platform;
 import com.platform.analytics.dto.request.ConnectAccountRequest;
 import com.platform.analytics.dto.response.SocialAccountResponse;
@@ -45,12 +44,12 @@ class AccountControllerTest {
     private SocialAccountService socialAccountService;
 
     // JwtAuthenticationFilter (a Filter, so included in the @WebMvcTest
-    // slice) depends on this Feign client. @WebMvcTest doesn't bring up
-    // Spring Cloud OpenFeign's FeignClientFactory infrastructure, so the
-    // real client bean can't be constructed here — mock it instead of
-    // letting the context try to build the real Feign proxy.
+    // slice) depends on JwtUtil, which needs a resolvable
+    // supabase.jwt-secret property this slice doesn't load - mock it
+    // instead (addFilters=false means the filter never actually runs
+    // against these requests anyway).
     @MockBean
-    private AuthServiceClient authServiceClient;
+    private com.platform.analytics.security.JwtUtil jwtUtil;
 
     private UUID userId;
     private UUID accountId;

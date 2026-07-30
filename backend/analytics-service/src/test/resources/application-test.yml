@@ -17,9 +17,8 @@ spring:
   jackson:
     default-property-inclusion: non_null
 
-auth-service:
-  url: http://localhost:9999
-  validate-token-path: /api/auth/validate
+supabase:
+  jwt-secret: test-supabase-secret-for-tests-only
 
 analytics:
   sync:
@@ -54,12 +53,6 @@ facebook:
 
 oauth:
   state-secret: test-secret
-
-notification-service:
-  url: http://localhost:9997
-
-internal-api:
-  key: test-internal-api-key
 
 logging:
   level:

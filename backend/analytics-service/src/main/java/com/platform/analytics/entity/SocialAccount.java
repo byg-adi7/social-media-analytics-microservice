@@ -1,5 +1,6 @@
 package com.platform.analytics.entity;
 
+import com.platform.analytics.constant.AccountConnectionType;
 import com.platform.analytics.constant.Platform;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -97,4 +98,14 @@ public class SocialAccount extends BaseEntity {
 
     @Column(name = "active", nullable = false)
     private boolean active;
+
+    /**
+     * How this account got its data. A user may have both an OAUTH and a
+     * CSV_IMPORT account for the same platform at once - independent
+     * accounts, not alternatives to each other.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "connection_type", nullable = false, length = 20)
+    @Builder.Default
+    private AccountConnectionType connectionType = AccountConnectionType.OAUTH;
 }

@@ -43,6 +43,11 @@ public interface SocialAccountRepository extends JpaRepository<SocialAccount, UU
     @Query("SELECT DISTINCT sa.platform FROM SocialAccount sa WHERE sa.userId = :userId AND sa.active = true")
     List<Platform> findDistinctActivePlatformsByUserId(@Param("userId") UUID userId);
 
-    @Query("SELECT sa FROM SocialAccount sa WHERE sa.active = true")
+    // CSV_IMPORT accounts are deliberately excluded: they have no live data
+    // source to sync from, so the scheduled job resolving a
+    // SocialMediaClient for one would either silently overwrite the user's
+    // uploaded data with mock data, or (if a real client is registered for
+    // that platform) fail against a fabricated account id/access token.
+    @Query("SELECT sa FROM SocialAccount sa WHERE sa.active = true AND sa.connectionType = 'OAUTH'")
     List<SocialAccount> findAllActiveAccounts();
 }

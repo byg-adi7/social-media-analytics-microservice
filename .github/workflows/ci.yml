@@ -8,12 +8,8 @@ on:
 
 jobs:
   unit-tests:
-    name: Unit tests (${{ matrix.service }})
+    name: Unit tests (analytics-service)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        service: [auth-service, analytics-service, notification-service]
     steps:
       - uses: actions/checkout@v4
 
@@ -23,18 +19,18 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-          cache-dependency-path: backend/${{ matrix.service }}/pom.xml
+          cache-dependency-path: backend/analytics-service/pom.xml
 
       - name: Run tests
-        working-directory: backend/${{ matrix.service }}
+        working-directory: backend/analytics-service
         run: mvn -B test
 
       - name: Upload surefire reports on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: surefire-reports-${{ matrix.service }}
-          path: backend/${{ matrix.service }}/target/surefire-reports
+          name: surefire-reports-analytics-service
+          path: backend/analytics-service/target/surefire-reports
 
   integration-smoke-test:
     name: Cross-service integration smoke test
@@ -54,7 +50,6 @@ jobs:
             echo "POSTGRES_PASSWORD=$(openssl rand -base64 32)"
             echo "POSTGRES_DB=audienceinsights"
             echo "SUPABASE_JWT_SECRET=$(openssl rand -base64 32)"
-            echo "INTERNAL_API_KEY=$(openssl rand -base64 32)"
             echo "OAUTH_STATE_SECRET=$(openssl rand -base64 32)"
           } > .env
 

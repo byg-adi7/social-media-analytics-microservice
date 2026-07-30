@@ -102,6 +102,7 @@ public class MockSocialMediaClient implements SocialMediaClient {
             case TIKTOK -> 38_000L;
             case FACEBOOK -> 21_000L;
             case SPOTIFY -> 15_000L;
+            case TWITTER -> 28_000L;
         };
     }
 

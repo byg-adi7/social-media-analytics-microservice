@@ -2,6 +2,7 @@ package com.platform.analytics.service.impl;
 
 import com.platform.analytics.client.SocialMediaClient;
 import com.platform.analytics.client.SocialMediaClientResolver;
+import com.platform.analytics.constant.AccountConnectionType;
 import com.platform.analytics.constant.Platform;
 import com.platform.analytics.dto.request.AnalyticsQueryRequest;
 import com.platform.analytics.dto.response.*;
@@ -86,6 +87,13 @@ public class ChartServiceImpl implements ChartService {
 
         List<TopContentResponse> allContent = new ArrayList<>();
         for (SocialAccount account : accounts) {
+            // A CSV import has no client to fetch posts from - resolving one
+            // would either hit a real API with a fabricated token, or (worse)
+            // silently mix in unrelated mock posts alongside the user's real
+            // uploaded numbers.
+            if (account.getConnectionType() != AccountConnectionType.OAUTH) {
+                continue;
+            }
             try {
                 SocialMediaClient client = socialMediaClientResolver.resolve(account.getPlatform());
                 allContent.addAll(client.fetchTopContent(account, Math.min(limit, 5)));
@@ -107,6 +115,9 @@ public class ChartServiceImpl implements ChartService {
 
         List<AudienceDemographicsResponse> result = new ArrayList<>();
         for (SocialAccount account : accounts) {
+            if (account.getConnectionType() != AccountConnectionType.OAUTH) {
+                continue;
+            }
             try {
                 SocialMediaClient client = socialMediaClientResolver.resolve(account.getPlatform());
                 client.fetchAudienceDemographics(account).ifPresent(result::add);

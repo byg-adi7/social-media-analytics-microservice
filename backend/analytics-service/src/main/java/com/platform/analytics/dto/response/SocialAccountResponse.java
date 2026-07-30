@@ -1,5 +1,6 @@
 package com.platform.analytics.dto.response;
 
+import com.platform.analytics.constant.AccountConnectionType;
 import com.platform.analytics.constant.Platform;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -30,4 +31,5 @@ public class SocialAccountResponse {
     private LocalDateTime connectedAt;
     private LocalDateTime lastSynced;
     private boolean active;
+    private AccountConnectionType connectionType;
 }

@@ -17,13 +17,18 @@ surfacing dashboards, reports, and notifications.
 
 ## Services
 
+Originally three separate services behind an nginx gateway (auth, analytics,
+notification). Auth Service shrank to a single JWT-validation class once
+identity moved to Supabase Auth, and the internal-only call from Analytics
+to Notification was the only thing the gateway routed besides `/api/*` -
+both were folded into `analytics-service` as a single deployable, so
+there's nothing left for a gateway to route between and no private
+service/paid-instance requirement to host it.
+
 | Service | Port | What it does |
 |---|---|---|
-| `backend/auth-service` | 8001 | Registration, login, JWT issuance. Every other service delegates authentication here — none of them validate tokens locally. |
-| `backend/analytics-service` | 8002 | Connects social accounts, syncs their analytics (real integrations for all 5 platforms, falling back to mock data by default), and serves dashboards/charts/reports. See [its README](backend/analytics-service/README.md) for full API docs and per-platform integration setup. |
-| `backend/notification-service` | 8003 | In-app notifications (fired automatically on account-connected/sync-failure events) and on-demand CSV reports pulled from the Analytics Service. |
-| `api-gateway` (nginx) | 8080 | Single public entry point, routes `/api/*` to the right service. |
-| `postgres` | 5432 | Shared Postgres instance — each service owns its own tables, managed by its own versioned Flyway migrations (`backend/*/src/main/resources/db/migration`), not a shared script. |
+| `backend/analytics-service` | 8080 | Everything: connects social accounts, syncs their analytics (real integrations for all 5 platforms, falling back to mock data by default), serves dashboards/charts/reports, verifies Supabase JWTs locally (no separate Auth Service), and creates in-app notifications / on-demand CSV reports (no separate Notification Service). See [its README](backend/analytics-service/README.md) for full API docs and per-platform integration setup. |
+| `postgres` | 5432 | Managed by versioned Flyway migrations (`backend/analytics-service/src/main/resources/db/migration`), not a shared script. |
 
 **Building the frontend or want the full API reference?** See
 [`FRONTEND_INTEGRATION_GUIDE.md`](FRONTEND_INTEGRATION_GUIDE.md) — backend
@@ -48,7 +53,7 @@ authentication flow.
    ```bash
    docker compose up --build
    ```
-   The gateway is then at `http://localhost:8080`. Without any platform
+   The service is then at `http://localhost:8080`. Without any platform
    credentials configured, every social integration runs on mock data —
    the stack is fully usable out of the box.
 

@@ -1,12 +1,12 @@
 package com.platform.analytics.service.impl;
 
-import com.platform.analytics.client.NotificationServiceClient;
-import com.platform.analytics.config.InternalApiProperties;
-import com.platform.analytics.constant.NotificationType;
+import com.platform.analytics.constant.AccountConnectionType;
+import com.platform.analytics.constant.Platform;
 import com.platform.analytics.dto.request.ConnectAccountRequest;
-import com.platform.analytics.dto.request.CreateNotificationRequest;
 import com.platform.analytics.dto.request.UpdateAccountRequest;
+import com.platform.analytics.dto.response.CsvImportResponse;
 import com.platform.analytics.dto.response.SocialAccountResponse;
+import com.platform.analytics.entity.Analytics;
 import com.platform.analytics.entity.SocialAccount;
 import com.platform.analytics.exception.BadRequestException;
 import com.platform.analytics.exception.ResourceNotFoundException;
@@ -15,14 +15,20 @@ import com.platform.analytics.repository.AnalyticsRepository;
 import com.platform.analytics.repository.SocialAccountRepository;
 import com.platform.analytics.service.AnalyticsSyncService;
 import com.platform.analytics.service.SocialAccountService;
+import com.platform.analytics.util.AnalyticsCalculator;
+import com.platform.analytics.util.CsvAnalyticsParser;
 import com.platform.analytics.validator.PlatformValidator;
+import com.platform.notification.constant.NotificationType;
+import com.platform.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -35,8 +41,7 @@ public class SocialAccountServiceImpl implements SocialAccountService {
     private final SocialAccountMapper socialAccountMapper;
     private final PlatformValidator platformValidator;
     private final AnalyticsSyncService analyticsSyncService;
-    private final NotificationServiceClient notificationServiceClient;
-    private final InternalApiProperties internalApiProperties;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional
@@ -81,18 +86,16 @@ public class SocialAccountServiceImpl implements SocialAccountService {
     }
 
     /**
-     * Best-effort: a Notification Service outage must never fail an
+     * Best-effort: a failure creating the notification must never fail an
      * otherwise-successful account connection, so this is deliberately
      * swallowed rather than allowed to propagate.
      */
     private void notifyAccountConnected(SocialAccount account) {
         try {
-            notificationServiceClient.createNotification(
-                    internalApiProperties.getKey(),
-                    new CreateNotificationRequest(
-                            account.getUserId(),
-                            NotificationType.ACCOUNT_CONNECTED,
-                            "Your " + account.getPlatform().getDisplayName() + " account was connected successfully."));
+            notificationService.create(
+                    account.getUserId(),
+                    NotificationType.ACCOUNT_CONNECTED,
+                    "Your " + account.getPlatform().getDisplayName() + " account was connected successfully.");
         } catch (Exception ex) {
             log.warn("Failed to send account-connected notification for account {}: {}",
                     account.getId(), ex.getMessage());
@@ -147,6 +150,10 @@ public class SocialAccountServiceImpl implements SocialAccountService {
     @Transactional
     public SocialAccountResponse syncAccount(UUID userId, UUID accountId) {
         SocialAccount account = findAccountOrThrow(userId, accountId);
+        if (account.getConnectionType() == AccountConnectionType.CSV_IMPORT) {
+            throw new BadRequestException(
+                    "This account's data comes from a CSV upload, not a live sync - upload a new CSV to update it");
+        }
         analyticsSyncService.syncAccount(account);
         return socialAccountMapper.toResponse(account);
     }
@@ -154,5 +161,94 @@ public class SocialAccountServiceImpl implements SocialAccountService {
     private SocialAccount findAccountOrThrow(UUID userId, UUID accountId) {
         return socialAccountRepository.findByIdAndUserId(accountId, userId)
                 .orElseThrow(() -> ResourceNotFoundException.forEntity("SocialAccount", accountId));
+    }
+
+    @Override
+    @Transactional
+    public CsvImportResponse importCsv(UUID userId, Platform platform, String accountName, MultipartFile file) {
+        platformValidator.validate(platform);
+        List<CsvAnalyticsParser.Row> rows = CsvAnalyticsParser.parse(file);
+
+        // Independent of any OAuth-connected account for the same platform -
+        // a synthetic id keeps it out of uk_platform_account_id's way, since
+        // that constraint is global (platform + account_id), not per-user.
+        SocialAccount account = SocialAccount.builder()
+                .userId(userId)
+                .platform(platform)
+                .accountId("csv-" + UUID.randomUUID())
+                .accountName(accountName)
+                .connectionType(AccountConnectionType.CSV_IMPORT)
+                .connectedAt(LocalDateTime.now())
+                .active(true)
+                .build();
+        SocialAccount saved = socialAccountRepository.save(account);
+        log.info("Created CSV-imported {} account {} for user {}", saved.getPlatform(), saved.getId(), userId);
+
+        UpsertCounts counts = upsertAnalyticsRows(saved, rows);
+        saved.setLastSynced(LocalDateTime.now());
+        socialAccountRepository.save(saved);
+
+        notifyAccountConnected(saved);
+
+        return CsvImportResponse.builder()
+                .account(socialAccountMapper.toResponse(saved))
+                .rowsInserted(counts.inserted())
+                .rowsUpdated(counts.updated())
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public CsvImportResponse mergeCsv(UUID userId, UUID accountId, MultipartFile file) {
+        SocialAccount account = findAccountOrThrow(userId, accountId);
+        if (account.getConnectionType() != AccountConnectionType.CSV_IMPORT) {
+            throw new BadRequestException("Only CSV-imported accounts can receive additional CSV uploads");
+        }
+
+        List<CsvAnalyticsParser.Row> rows = CsvAnalyticsParser.parse(file);
+        UpsertCounts counts = upsertAnalyticsRows(account, rows);
+        account.setLastSynced(LocalDateTime.now());
+        socialAccountRepository.save(account);
+        log.info("Merged {} CSV row(s) ({} new, {} updated) into account {} for user {}",
+                rows.size(), counts.inserted(), counts.updated(), accountId, userId);
+
+        return CsvImportResponse.builder()
+                .account(socialAccountMapper.toResponse(account))
+                .rowsInserted(counts.inserted())
+                .rowsUpdated(counts.updated())
+                .build();
+    }
+
+    private record UpsertCounts(int inserted, int updated) {
+    }
+
+    /** Upserts by (account, date): a re-uploaded CSV updates overlapping dates instead of duplicating them. */
+    private UpsertCounts upsertAnalyticsRows(SocialAccount account, List<CsvAnalyticsParser.Row> rows) {
+        int inserted = 0;
+        int updated = 0;
+        for (CsvAnalyticsParser.Row row : rows) {
+            Optional<Analytics> existing =
+                    analyticsRepository.findBySocialAccountIdAndAnalyticsDate(account.getId(), row.date());
+            Analytics analytics = existing.orElseGet(() -> Analytics.builder()
+                    .socialAccount(account)
+                    .analyticsDate(row.date())
+                    .build());
+
+            analytics.setFollowers(row.followers());
+            analytics.setViews(row.views());
+            analytics.setLikes(row.likes());
+            analytics.setComments(row.comments());
+            analytics.setShares(row.shares());
+            analytics.setEngagementRate(
+                    AnalyticsCalculator.engagementRate(row.likes(), row.comments(), row.shares(), row.followers()));
+
+            analyticsRepository.save(analytics);
+            if (existing.isPresent()) {
+                updated++;
+            } else {
+                inserted++;
+            }
+        }
+        return new UpsertCounts(inserted, updated);
     }
 }

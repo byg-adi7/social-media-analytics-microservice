@@ -2,27 +2,17 @@ package com.platform.analytics;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.ActiveProfiles;
-import com.platform.analytics.client.AuthServiceClient;
-import com.platform.analytics.client.NotificationServiceClient;
 
 /**
  * Verifies the full Spring application context loads successfully with all
- * beans wired correctly.
+ * beans wired correctly - including the merged-in com.platform.notification
+ * package, which is a sibling package the app's scanBasePackages must list
+ * explicitly (see AnalyticsServiceApplication).
  */
 @SpringBootTest
 @ActiveProfiles("test")
 class AnalyticsServiceApplicationTests {
-
-    // These Feign clients would attempt a real connection during context
-    // initialization checks in some environments; mocking them keeps this
-    // test focused purely on context wiring.
-    @MockBean
-    private AuthServiceClient authServiceClient;
-
-    @MockBean
-    private NotificationServiceClient notificationServiceClient;
 
     @Test
     void contextLoads() {

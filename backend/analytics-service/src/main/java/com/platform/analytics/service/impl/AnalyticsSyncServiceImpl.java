@@ -1,11 +1,7 @@
 package com.platform.analytics.service.impl;
 
-import com.platform.analytics.client.NotificationServiceClient;
 import com.platform.analytics.client.SocialMediaClient;
 import com.platform.analytics.client.SocialMediaClientResolver;
-import com.platform.analytics.config.InternalApiProperties;
-import com.platform.analytics.constant.NotificationType;
-import com.platform.analytics.dto.request.CreateNotificationRequest;
 import com.platform.analytics.entity.Analytics;
 import com.platform.analytics.entity.SocialAccount;
 import com.platform.analytics.exception.AnalyticsException;
@@ -14,6 +10,8 @@ import com.platform.analytics.repository.AnalyticsRepository;
 import com.platform.analytics.repository.SocialAccountRepository;
 import com.platform.analytics.service.AnalyticsSyncService;
 import com.platform.analytics.util.AnalyticsCalculator;
+import com.platform.notification.constant.NotificationType;
+import com.platform.notification.service.NotificationService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
@@ -30,8 +28,7 @@ public class AnalyticsSyncServiceImpl implements AnalyticsSyncService {
     private final SocialAccountRepository socialAccountRepository;
     private final AnalyticsRepository analyticsRepository;
     private final SocialMediaClientResolver socialMediaClientResolver;
-    private final NotificationServiceClient notificationServiceClient;
-    private final InternalApiProperties internalApiProperties;
+    private final NotificationService notificationService;
 
     /**
      * Self-reference obtained through the Spring proxy (not {@code this}),
@@ -48,14 +45,12 @@ public class AnalyticsSyncServiceImpl implements AnalyticsSyncService {
     public AnalyticsSyncServiceImpl(SocialAccountRepository socialAccountRepository,
                                      AnalyticsRepository analyticsRepository,
                                      SocialMediaClientResolver socialMediaClientResolver,
-                                     NotificationServiceClient notificationServiceClient,
-                                     InternalApiProperties internalApiProperties,
+                                     NotificationService notificationService,
                                      @Lazy AnalyticsSyncService self) {
         this.socialAccountRepository = socialAccountRepository;
         this.analyticsRepository = analyticsRepository;
         this.socialMediaClientResolver = socialMediaClientResolver;
-        this.notificationServiceClient = notificationServiceClient;
-        this.internalApiProperties = internalApiProperties;
+        this.notificationService = notificationService;
         this.self = self;
     }
 
@@ -137,18 +132,16 @@ public class AnalyticsSyncServiceImpl implements AnalyticsSyncService {
 
     /**
      * Best-effort, same reasoning as SocialAccountServiceImpl's
-     * notifyAccountConnected: a Notification Service outage must not
+     * notifyAccountConnected: a failure creating the notification must not
      * disrupt the sync loop for the remaining accounts.
      */
     private void notifySyncFailure(SocialAccount account) {
         try {
-            notificationServiceClient.createNotification(
-                    internalApiProperties.getKey(),
-                    new CreateNotificationRequest(
-                            account.getUserId(),
-                            NotificationType.SYNC_FAILURE,
-                            "We couldn't sync your " + account.getPlatform().getDisplayName()
-                                    + " account. We'll try again on the next scheduled sync."));
+            notificationService.create(
+                    account.getUserId(),
+                    NotificationType.SYNC_FAILURE,
+                    "We couldn't sync your " + account.getPlatform().getDisplayName()
+                            + " account. We'll try again on the next scheduled sync.");
         } catch (Exception ex) {
             log.warn("Failed to send sync-failure notification for account {}: {}",
                     account.getId(), ex.getMessage());

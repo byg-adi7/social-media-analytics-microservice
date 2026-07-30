@@ -2,7 +2,7 @@
 
 Analytics microservice for the **Audience Insights Platform** — a multi-service SaaS product that lets content creators connect multiple social media accounts and view unified analytics from one dashboard.
 
-This service owns **everything analytics-related**: connecting accounts, synchronizing metrics, aggregating data, computing engagement/growth calculations, and preparing chart-ready JSON for the frontend. It does **not** render charts, and it does **not** perform local authentication — every request's JWT is validated against the central Auth Service.
+This service owns **everything**: connecting accounts, synchronizing metrics, aggregating data, computing engagement/growth calculations, preparing chart-ready JSON for the frontend, verifying Supabase-issued JWTs locally (no separate Auth Service), and creating in-app notifications / generating on-demand CSV reports (no separate Notification Service - both were folded into this service to make free-tier hosting realistic; see the root README's Services section). It does **not** render charts.
 
 ---
 
@@ -22,13 +22,14 @@ Controller  →  Service (interface)  →  ServiceImpl  →  Repository  →  En
 - **entity** — JPA entities (`SocialAccount`, `Analytics`).
 - **dto.request / dto.response** — API contracts, decoupled from entities.
 - **mapper** — MapStruct entity ↔ DTO conversion.
-- **client** — the generic `SocialMediaClient` abstraction, `MockSocialMediaClient` (simulated data fallback for any platform without a real integration yet), `SocialMediaClientResolver` (prefers a real client over the mock when both exist for a platform), and `AuthServiceClient` (Feign, JWT validation). Platform-specific code does **not** live here — see below.
+- **client** — the generic `SocialMediaClient` abstraction, `MockSocialMediaClient` (simulated data fallback for any platform without a real integration yet), and `SocialMediaClientResolver` (prefers a real client over the mock when both exist for a platform). Platform-specific code does **not** live here — see below.
 - **youtube** (and, as they're built, **instagram** / **facebook** / **spotify** / **tiktok**) — each real platform integration is a self-contained top-level package with its own OAuth service, API client (`youtube.api`), external API response DTOs (`youtube.api.dto`), outward-facing DTOs (`youtube.dto`), service/service.impl, controller, and `*Properties` config class. Nothing outside the platform's own package needs to change to add one — see Extensibility below.
-- **security** — stateless JWT filter that delegates validation to the Auth Service; never parses/verifies tokens locally. Also holds `StateTokenService`, the HMAC OAuth-state signer shared by every platform's connect flow.
+- **security** — stateless JWT filter (`JwtAuthenticationFilter`) that verifies Supabase-issued tokens locally via `JwtUtil` (HMAC-SHA256 against `supabase.jwt-secret`, no network call). Also holds `StateTokenService`, the HMAC OAuth-state signer shared by every platform's connect flow.
 - **exception** — typed exceptions + `GlobalExceptionHandler` for consistent error responses.
 - **util / validator / constant** — calculation engine, shared helpers, enums.
 - **scheduler** — hourly automatic synchronization job.
-- **config** — Security, CORS, shared OAuth (`OAuthProperties`), Feign, OpenAPI, JPA auditing configuration.
+- **config** — Security, CORS, shared OAuth (`OAuthProperties`), Feign, OpenAPI, JPA repository/entity scanning (`com.platform.notification` is a sibling package, not nested under this one), JPA auditing configuration.
+- **com.platform.notification** (sibling top-level package, not nested under `com.platform.analytics`) — the former standalone Notification Service: in-app notifications and on-demand CSV reports. Calls into `AnalyticsQueryService` directly (in-process, not Feign) to pull data for a report.
 
 ### Extensibility
 
@@ -128,7 +129,7 @@ Every endpoint except `/swagger-ui/**`, `/v3/api-docs/**`, and `/actuator/health
 Authorization: Bearer <jwt>
 ```
 
-The token is **not** validated locally — it's forwarded to the Auth Service (`auth-service.url` in `application.yml`) via OpenFeign. Requests with a missing/invalid token receive a `401` with a structured `ErrorResponse` body.
+The token is validated locally (HMAC-SHA256 against `supabase.jwt-secret`, see `JwtUtil`) - no network call. Requests with a missing/invalid token receive a `401` with a structured `ErrorResponse` body.
 
 ### Error Response Shape
 
@@ -435,8 +436,7 @@ Scaling past a handful of testers to real external users requires Meta **App Rev
 | `SERVER_PORT` | 8082 | HTTP port |
 | `DB_HOST` / `DB_PORT` / `DB_NAME` | localhost / 5432 / analytics_db | PostgreSQL connection |
 | `DB_USERNAME` / `DB_PASSWORD` | postgres / postgres | PostgreSQL credentials |
-| `DDL_AUTO` | update | Hibernate schema strategy |
-| `AUTH_SERVICE_URL` | http://localhost:8081 | Base URL of the Auth Service |
+| `SUPABASE_JWT_SECRET` | dev-only-placeholder | HMAC secret verifying Supabase-issued JWTs locally — **must be a real value from your Supabase project in production** |
 | `SYNC_ENABLED` | true | Enable/disable the hourly scheduler |
 | `SYNC_CRON` | `0 0 * * * *` | Cron expression for sync frequency |
 | `MOCK_DATA_ENABLED` | true | Use the mock social media client |
@@ -461,8 +461,6 @@ Scaling past a handful of testers to real external users requires Meta **App Rev
 | `FACEBOOK_REDIRECT_URI` | http://localhost:8082/api/oauth/facebook/callback | Must match the Meta app's configured redirect URI |
 | `FACEBOOK_FRONTEND_REDIRECT` | http://localhost:3000/dashboard | Where the browser lands after a successful connect |
 | `OAUTH_STATE_SECRET` | dev-only-change-me-in-production | HMAC secret signing the OAuth `state` parameter for every platform's connect flow — **set a strong value in production** |
-| `NOTIFICATION_SERVICE_URL` | http://localhost:8003 | Base URL of the Notification Service, called on account-connected/sync-failure events |
-| `INTERNAL_API_KEY` | dev-only-change-me-in-production | Shared secret presented to the Notification Service's internal-only endpoint — **must match its own `INTERNAL_API_KEY`, and must be a strong value in production** |
 
 ### Run Locally
 
@@ -477,10 +475,10 @@ The service starts on `http://localhost:8082`.
 
 ### Run with Docker
 
-This service is one part of the unified platform (Auth Service, Analytics
-Service, Notification Service, Postgres, and an nginx gateway) — see the
-root [README.md](../../README.md) for the actual `docker-compose.yml`
-(at the repo root, not here) and the `.env` setup it requires.
+This service is one part of the unified platform (this service + Postgres)
+— see the root [README.md](../../README.md) for the actual
+`docker-compose.yml` (at the repo root, not here) and the `.env` setup it
+requires.
 
 ---
 
@@ -492,8 +490,10 @@ mvn test
 
 Includes:
 - **Unit tests** — `AnalyticsCalculatorTest` (all formulas), `StateTokenServiceTest` (OAuth state sign/verify)
-- **Service tests (Mockito)** — `SocialAccountServiceImplTest`, `AnalyticsSyncServiceImplTest`, `SocialMediaClientResolverTest`
+- **Service tests (Mockito)** — `SocialAccountServiceImplTest`, `AnalyticsSyncServiceImplTest`, `SocialMediaClientResolverTest`, `NotificationServiceImplTest`, `ReportServiceImplTest`
 - **Repository tests (`@DataJpaTest`, H2)** — `AnalyticsRepositoryTest`
+- **Controller tests (`@WebMvcTest`)** — `AccountControllerTest`
+- **Full end-to-end tests (`@SpringBootTest` + MockMvc, real datasource)** — `DashboardIntegrationTest`, which specifically guards against `LazyInitializationException` on the dashboard/chart endpoints
 - **Controller tests (MockMvc)** — `AccountControllerTest`
 - **Context load smoke test** — `AnalyticsServiceApplicationTests`
 
@@ -523,4 +523,4 @@ SLF4J throughout. Logged events include:
 
 ## Tech Stack
 
-Java 21 · Spring Boot 3.3 · Maven · PostgreSQL · Spring Data JPA · Spring Validation · Spring Security · JWT (delegated) · Lombok · OpenAPI/Swagger · Docker · JUnit 5 · Mockito · MapStruct · OpenFeign
+Java 21 · Spring Boot 3.3 · Maven · PostgreSQL · Spring Data JPA · Spring Validation · Spring Security · JJWT · Lombok · OpenAPI/Swagger · Docker · JUnit 5 · Mockito · MapStruct · OpenFeign

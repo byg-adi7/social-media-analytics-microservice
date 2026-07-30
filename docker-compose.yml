@@ -10,10 +10,9 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # database/schema.sql is no longer mounted here: both auth-service and
-      # analytics-service manage their own tables via Hibernate
-      # (spring.jpa.hibernate.ddl-auto=update) from their JPA entities, which
-      # have diverged from that static seed script (UUID PKs, richer
+      # database/schema.sql is no longer mounted here: analytics-service
+      # manages its tables via Flyway (db/migration) from its JPA entities,
+      # which have diverged from that static seed script (UUID PKs, richer
       # per-platform OAuth columns). Kept in the repo for historical
       # reference only - see database/schema.sql's header comment.
     networks:
@@ -23,24 +22,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-  auth-service:
-    build:
-      context: ./backend/auth-service
-      dockerfile: Dockerfile
-    container_name: auth-service
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-audienceinsights}
-      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-audience}
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env - see .env.example}
-      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:?Set SUPABASE_JWT_SECRET in .env - see .env.example}
-      SERVER_PORT: 8001
-    ports:
-      - "8001:8001"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - audienceinsights-network
   analytics-service:
     build:
       context: ./backend/analytics-service
@@ -51,9 +32,7 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-audience}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env - see .env.example}
       SERVER_PORT: 8002
-      AUTH_SERVICE_URL: http://auth-service:8001
-      NOTIFICATION_SERVICE_URL: http://notification-service:8003
-      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?Set INTERNAL_API_KEY in .env - see .env.example}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:?Set SUPABASE_JWT_SECRET in .env - see .env.example}
       OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET:?Set OAUTH_STATE_SECRET in .env - see .env.example}
       # Real platform OAuth credentials - all optional. Any left unset keep
       # that platform's integration disabled and served from mock data (see
@@ -74,49 +53,14 @@ services:
       FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
       FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
     ports:
-      - "8002:8002"
+      # Host port kept at 8080 (what the frontend, scripts, and README
+      # already point at) even though nginx is gone - this is now the only
+      # backend service, so there's nothing left for a gateway to route
+      # between.
+      - "8080:8002"
     depends_on:
       postgres:
         condition: service_healthy
-      auth-service:
-        condition: service_started
-    networks:
-      - audienceinsights-network
-  notification-service:
-    build:
-      context: ./backend/notification-service
-      dockerfile: Dockerfile
-    container_name: notification-service
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-audienceinsights}
-      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-audience}
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env - see .env.example}
-      SERVER_PORT: 8003
-      AUTH_SERVICE_URL: http://auth-service:8001
-      ANALYTICS_SERVICE_URL: http://analytics-service:8002
-      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?Set INTERNAL_API_KEY in .env - see .env.example}
-    ports:
-      - "8003:8003"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      auth-service:
-        condition: service_started
-      analytics-service:
-        condition: service_started
-    networks:
-      - audienceinsights-network
-  api-gateway:
-    image: nginx:alpine
-    container_name: api-gateway
-    ports:
-      - "8080:80"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - auth-service
-      - analytics-service
-      - notification-service
     networks:
       - audienceinsights-network
 networks:

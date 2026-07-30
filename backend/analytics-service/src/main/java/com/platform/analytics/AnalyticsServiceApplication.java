@@ -6,16 +6,24 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
- * Entry point for the Analytics Service.
+ * Entry point for the merged Analytics + Notification service.
  * <p>
- * This microservice is responsible for connecting social media accounts,
- * synchronizing analytics data, aggregating metrics, and exposing
- * dashboard/report/chart-ready JSON data to the frontend.
+ * Connects social media accounts, synchronizes analytics data, aggregates
+ * metrics, exposes dashboard/report/chart-ready JSON data, and (since the
+ * former standalone Notification Service was folded in here) creates
+ * in-app notifications and generates on-demand reports. Authentication is
+ * validated locally against Supabase's JWT secret (see JwtUtil) - no
+ * separate Auth Service exists anymore.
  * <p>
- * This service does NOT perform local user authentication. All incoming
- * requests are validated against the central Auth Service via Feign.
+ * {@code com.platform.notification} is a sibling package, not nested under
+ * {@code com.platform.analytics} - scanBasePackages widens component
+ * scanning to cover it. Repository/entity scanning for that package is
+ * handled separately by config.JpaRepositoryConfig, NOT here - putting
+ * @EnableJpaRepositories/@EntityScan directly on this class would also
+ * apply them inside @WebMvcTest slices (which don't set up a datasource at
+ * all), breaking every controller-slice test.
  */
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = {"com.platform.analytics", "com.platform.notification"})
 @EnableFeignClients(basePackages = "com.platform.analytics")
 @EnableScheduling
 public class AnalyticsServiceApplication {

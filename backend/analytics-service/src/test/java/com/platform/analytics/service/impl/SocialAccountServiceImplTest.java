@@ -1,10 +1,11 @@
 package com.platform.analytics.service.impl;
 
-import com.platform.analytics.client.NotificationServiceClient;
-import com.platform.analytics.config.InternalApiProperties;
+import com.platform.analytics.constant.AccountConnectionType;
 import com.platform.analytics.constant.Platform;
 import com.platform.analytics.dto.request.ConnectAccountRequest;
+import com.platform.analytics.dto.response.CsvImportResponse;
 import com.platform.analytics.dto.response.SocialAccountResponse;
+import com.platform.analytics.entity.Analytics;
 import com.platform.analytics.entity.SocialAccount;
 import com.platform.analytics.exception.BadRequestException;
 import com.platform.analytics.exception.ResourceNotFoundException;
@@ -13,13 +14,17 @@ import com.platform.analytics.repository.AnalyticsRepository;
 import com.platform.analytics.repository.SocialAccountRepository;
 import com.platform.analytics.service.AnalyticsSyncService;
 import com.platform.analytics.validator.PlatformValidator;
+import com.platform.notification.service.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
 
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
@@ -49,10 +54,7 @@ class SocialAccountServiceImplTest {
     private AnalyticsSyncService analyticsSyncService;
 
     @Mock
-    private NotificationServiceClient notificationServiceClient;
-
-    @Mock
-    private InternalApiProperties internalApiProperties;
+    private NotificationService notificationService;
 
     @InjectMocks
     private SocialAccountServiceImpl socialAccountService;
@@ -89,18 +91,17 @@ class SocialAccountServiceImplTest {
                 .thenReturn(false);
         when(socialAccountRepository.save(any(SocialAccount.class))).thenReturn(account);
         when(socialAccountMapper.toResponse(account)).thenReturn(SocialAccountResponse.builder().id(accountId).build());
-        when(internalApiProperties.getKey()).thenReturn("test-key");
 
         SocialAccountResponse response = socialAccountService.connectAccount(userId, request);
 
         assertThat(response.getId()).isEqualTo(accountId);
         verify(platformValidator).validate(Platform.YOUTUBE);
         verify(analyticsSyncService).syncAccount(account);
-        verify(notificationServiceClient).createNotification(eq("test-key"), any());
+        verify(notificationService).create(eq(userId), any(), any());
     }
 
     @Test
-    void connectAccount_notificationServiceDown_stillReturnsSuccessfully() {
+    void connectAccount_notificationCreateFails_stillReturnsSuccessfully() {
         ConnectAccountRequest request = ConnectAccountRequest.builder()
                 .platform(Platform.YOUTUBE)
                 .accountId("yt-123")
@@ -112,11 +113,10 @@ class SocialAccountServiceImplTest {
                 .thenReturn(false);
         when(socialAccountRepository.save(any(SocialAccount.class))).thenReturn(account);
         when(socialAccountMapper.toResponse(account)).thenReturn(SocialAccountResponse.builder().id(accountId).build());
-        when(internalApiProperties.getKey()).thenReturn("test-key");
-        doThrow(new RuntimeException("notification service unreachable"))
-                .when(notificationServiceClient).createNotification(any(), any());
+        doThrow(new RuntimeException("notification create failed"))
+                .when(notificationService).create(any(), any(), any());
 
-        // A Notification Service outage must not fail an otherwise-successful connect.
+        // A notification-creation failure must not fail an otherwise-successful connect.
         SocialAccountResponse response = socialAccountService.connectAccount(userId, request);
 
         assertThat(response.getId()).isEqualTo(accountId);
@@ -172,5 +172,98 @@ class SocialAccountServiceImplTest {
 
         assertThat(response.getId()).isEqualTo(accountId);
         verify(analyticsSyncService).syncAccount(account);
+    }
+
+    @Test
+    void syncAccount_rejectsCsvImportAccount() {
+        SocialAccount csvAccount = SocialAccount.builder()
+                .id(accountId).userId(userId).platform(Platform.TWITTER)
+                .accountId("csv-abc").connectionType(AccountConnectionType.CSV_IMPORT)
+                .connectedAt(LocalDateTime.now()).active(true).build();
+        when(socialAccountRepository.findByIdAndUserId(accountId, userId)).thenReturn(Optional.of(csvAccount));
+
+        assertThatThrownBy(() -> socialAccountService.syncAccount(userId, accountId))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("CSV");
+
+        verify(analyticsSyncService, never()).syncAccount(any());
+    }
+
+    private static MockMultipartFile csvFile(String content) {
+        return new MockMultipartFile("file", "data.csv", "text/csv", content.getBytes(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void importCsv_createsCsvImportAccount_andInsertsAllRows() {
+        String csv = """
+                date,followers,views,likes,comments,shares
+                2026-07-01,1000,500,20,3,1
+                2026-07-02,1050,520,22,4,2
+                """;
+
+        when(socialAccountRepository.save(any(SocialAccount.class))).thenAnswer(inv -> {
+            SocialAccount a = inv.getArgument(0);
+            if (a.getId() == null) {
+                a.setId(accountId);
+            }
+            return a;
+        });
+        when(analyticsRepository.findBySocialAccountIdAndAnalyticsDate(eq(accountId), any()))
+                .thenReturn(Optional.empty());
+        when(socialAccountMapper.toResponse(any())).thenReturn(SocialAccountResponse.builder().id(accountId).build());
+
+        CsvImportResponse response = socialAccountService.importCsv(userId, Platform.TWITTER, "My Twitter Export", csvFile(csv));
+
+        assertThat(response.getRowsInserted()).isEqualTo(2);
+        assertThat(response.getRowsUpdated()).isZero();
+        assertThat(response.getAccount().getId()).isEqualTo(accountId);
+        verify(platformValidator).validate(Platform.TWITTER);
+        verify(analyticsRepository, times(2)).save(any(Analytics.class));
+        // CSV import is not a live sync - must never trigger the sync service.
+        verify(analyticsSyncService, never()).syncAccount(any());
+        verify(notificationService).create(eq(userId), any(), any());
+
+        var accountCaptor = org.mockito.ArgumentCaptor.forClass(SocialAccount.class);
+        verify(socialAccountRepository, atLeastOnce()).save(accountCaptor.capture());
+        assertThat(accountCaptor.getAllValues().get(0).getConnectionType()).isEqualTo(AccountConnectionType.CSV_IMPORT);
+    }
+
+    @Test
+    void mergeCsv_upsertsByDate_intoExistingCsvImportAccount() {
+        SocialAccount csvAccount = SocialAccount.builder()
+                .id(accountId).userId(userId).platform(Platform.TWITTER)
+                .accountId("csv-abc").connectionType(AccountConnectionType.CSV_IMPORT)
+                .connectedAt(LocalDateTime.now()).active(true).build();
+        Analytics existingRow = Analytics.builder()
+                .socialAccount(csvAccount).analyticsDate(LocalDate.of(2026, 7, 1)).followers(900).build();
+
+        String csv = """
+                date,followers,views,likes,comments,shares
+                2026-07-01,1000,500,20,3,1
+                2026-07-02,1050,520,22,4,2
+                """;
+
+        when(socialAccountRepository.findByIdAndUserId(accountId, userId)).thenReturn(Optional.of(csvAccount));
+        when(analyticsRepository.findBySocialAccountIdAndAnalyticsDate(accountId, LocalDate.of(2026, 7, 1)))
+                .thenReturn(Optional.of(existingRow));
+        when(analyticsRepository.findBySocialAccountIdAndAnalyticsDate(accountId, LocalDate.of(2026, 7, 2)))
+                .thenReturn(Optional.empty());
+        when(socialAccountMapper.toResponse(csvAccount)).thenReturn(SocialAccountResponse.builder().id(accountId).build());
+
+        CsvImportResponse response = socialAccountService.mergeCsv(userId, accountId, csvFile(csv));
+
+        assertThat(response.getRowsUpdated()).isEqualTo(1);
+        assertThat(response.getRowsInserted()).isEqualTo(1);
+        // The overlapping date's existing row must be updated in place, not duplicated.
+        assertThat(existingRow.getFollowers()).isEqualTo(1000);
+    }
+
+    @Test
+    void mergeCsv_rejectsAccountThatIsNotCsvImport() {
+        when(socialAccountRepository.findByIdAndUserId(accountId, userId)).thenReturn(Optional.of(account));
+
+        assertThatThrownBy(() -> socialAccountService.mergeCsv(userId, accountId, csvFile("date,followers,views,likes,comments,shares\n2026-07-01,1,1,1,1,1\n")))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("CSV-imported");
     }
 }

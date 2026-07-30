@@ -8,6 +8,13 @@ spring:
   application:
     name: analytics-service
 
+  servlet:
+    multipart:
+      # Generous for years of daily CSV rows while still guarding against
+      # pathological uploads; CsvAnalyticsParser also caps row count.
+      max-file-size: 2MB
+      max-request-size: 2MB
+
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:analytics_db}
     username: ${DB_USERNAME:postgres}
@@ -55,10 +62,11 @@ spring:
     serialization:
       write-dates-as-timestamps: false
 
-# Auth Service integration (JWT validation via Feign, no local authentication)
-auth-service:
-  url: ${AUTH_SERVICE_URL:http://localhost:8081}
-  validate-token-path: /api/auth/validate
+# Verifies JWTs issued by Supabase Auth locally - identity itself (register,
+# login, password hashing, email verification) is fully delegated to
+# Supabase; this service only checks that a token is genuine.
+supabase:
+  jwt-secret: ${SUPABASE_JWT_SECRET:dev-only-placeholder-set-real-supabase-jwt-secret-in-env}
 
 # CORS allow-list for the frontend origin(s). Comma-separated for multiple
 # environments/domains, e.g. "https://app.example.com,https://staging.example.com".
@@ -71,25 +79,12 @@ cors:
 oauth:
   state-secret: ${OAUTH_STATE_SECRET:dev-only-change-me-in-production}
 
-# Notification Service, called on real events (account connected, sync
-# failure) via its internal-only endpoint.
-notification-service:
-  url: ${NOTIFICATION_SERVICE_URL:http://localhost:8003}
-
-# Shared secret presented to the Notification Service's /internal/**
-# endpoints. Must match internal-api.key over there.
-internal-api:
-  key: ${INTERNAL_API_KEY:dev-only-change-me-in-production}
-
 feign:
   client:
     config:
       default:
         connectTimeout: 5000
         readTimeout: 10000
-      auth-service:
-        connectTimeout: 3000
-        readTimeout: 5000
       youtube-data-api:
         connectTimeout: 5000
         readTimeout: 10000
@@ -105,9 +100,6 @@ feign:
       facebook-graph-api:
         connectTimeout: 5000
         readTimeout: 10000
-      notification-service:
-        connectTimeout: 3000
-        readTimeout: 5000
 
 # Application specific settings
 analytics:
@@ -210,7 +202,10 @@ management:
         include: health,info,metrics
   endpoint:
     health:
-      show-details: always
+      # Never "always": /actuator/health is permitAll in SecurityConfig, so
+      # "always" would expose internal details (DB status, disk space,
+      # component internals) to anyone who can reach this endpoint.
+      show-details: never
 
 springdoc:
   api-docs:

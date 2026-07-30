@@ -1,7 +1,9 @@
 package com.platform.analytics.controller;
 
+import com.platform.analytics.constant.Platform;
 import com.platform.analytics.dto.request.ConnectAccountRequest;
 import com.platform.analytics.dto.request.UpdateAccountRequest;
+import com.platform.analytics.dto.response.CsvImportResponse;
 import com.platform.analytics.dto.response.SocialAccountResponse;
 import com.platform.analytics.security.SecurityContextUtil;
 import com.platform.analytics.service.SocialAccountService;
@@ -12,8 +14,10 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -83,5 +87,29 @@ public class AccountController {
         log.info("Incoming request: sync account {}", id);
         UUID userId = SecurityContextUtil.getCurrentUserId();
         return socialAccountService.syncAccount(userId, id);
+    }
+
+    @PostMapping(value = "/import-csv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Create a new account from an uploaded CSV of daily metrics",
+            description = "For platforms without a live connection (e.g. Twitter/X), or as a supplementary "
+                    + "manual data source alongside an already-connected account for the same platform. "
+                    + "CSV columns (any order): date,followers,views,likes,comments,shares.")
+    public CsvImportResponse importCsv(
+            @RequestParam Platform platform,
+            @RequestParam String accountName,
+            @RequestPart("file") MultipartFile file) {
+        log.info("Incoming request: import CSV, platform={}", platform);
+        UUID userId = SecurityContextUtil.getCurrentUserId();
+        return socialAccountService.importCsv(userId, platform, accountName, file);
+    }
+
+    @PostMapping(value = "/{id}/import-csv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Re-upload a CSV into an existing CSV-imported account",
+            description = "Upserts by date: rows for dates already present are updated, new dates are added.")
+    public CsvImportResponse reimportCsv(@PathVariable UUID id, @RequestPart("file") MultipartFile file) {
+        log.info("Incoming request: merge CSV into account {}", id);
+        UUID userId = SecurityContextUtil.getCurrentUserId();
+        return socialAccountService.mergeCsv(userId, id, file);
     }
 }

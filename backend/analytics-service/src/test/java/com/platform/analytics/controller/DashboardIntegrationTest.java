@@ -1,27 +1,29 @@
 package com.platform.analytics.controller;
 
-import com.platform.analytics.client.AuthServiceClient;
 import com.platform.analytics.constant.Platform;
-import com.platform.analytics.dto.response.TokenValidationResponse;
 import com.platform.analytics.entity.Analytics;
 import com.platform.analytics.entity.SocialAccount;
 import com.platform.analytics.repository.AnalyticsRepository;
 import com.platform.analytics.repository.SocialAccountRepository;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.Date;
 import java.util.UUID;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -54,10 +56,11 @@ class DashboardIntegrationTest {
     @Autowired
     private AnalyticsRepository analyticsRepository;
 
-    @MockBean
-    private AuthServiceClient authServiceClient;
+    @Value("${supabase.jwt-secret}")
+    private String supabaseJwtSecret;
 
     private UUID userId;
+    private String bearerToken;
 
     @BeforeEach
     void setUp() {
@@ -88,17 +91,20 @@ class DashboardIntegrationTest {
                 .engagementRate(5.7)
                 .build());
 
-        when(authServiceClient.validateToken(any())).thenReturn(TokenValidationResponse.builder()
-                .valid(true)
-                .userId(userId)
-                .email("dashboard-test@example.com")
-                .role("authenticated")
-                .build());
+        SecretKey key = Keys.hmacShaKeyFor(supabaseJwtSecret.getBytes(StandardCharsets.UTF_8));
+        bearerToken = "Bearer " + Jwts.builder()
+                .subject(userId.toString())
+                .claim("email", "dashboard-test@example.com")
+                .claim("role", "authenticated")
+                .issuedAt(new Date())
+                .expiration(Date.from(java.time.Instant.now().plus(1, ChronoUnit.HOURS)))
+                .signWith(key)
+                .compact();
     }
 
     @Test
     void dashboard_withRealConnectedAccountData_returnsAggregatedKpisWithoutLazyInitializationException() throws Exception {
-        mockMvc.perform(get("/api/dashboard").header("Authorization", "Bearer fake-token"))
+        mockMvc.perform(get("/api/dashboard").header("Authorization", bearerToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalFollowers").value(1000))
                 .andExpect(jsonPath("$.bestPerformingPlatform").value("YOUTUBE"));
@@ -106,7 +112,7 @@ class DashboardIntegrationTest {
 
     @Test
     void platformComparisonChart_withRealData_returnsWithoutLazyInitializationException() throws Exception {
-        mockMvc.perform(get("/api/charts/platform-comparison").header("Authorization", "Bearer fake-token"))
+        mockMvc.perform(get("/api/charts/platform-comparison").header("Authorization", bearerToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].platform").value("YOUTUBE"))
                 .andExpect(jsonPath("$[0].followers").value(1000));
@@ -114,7 +120,7 @@ class DashboardIntegrationTest {
 
     @Test
     void engagementChart_withRealData_returnsWithoutLazyInitializationException() throws Exception {
-        mockMvc.perform(get("/api/charts/engagement").header("Authorization", "Bearer fake-token"))
+        mockMvc.perform(get("/api/charts/engagement").header("Authorization", bearerToken))
                 .andExpect(status().isOk());
     }
 }

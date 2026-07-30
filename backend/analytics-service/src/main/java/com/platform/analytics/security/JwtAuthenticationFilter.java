@@ -1,7 +1,5 @@
 package com.platform.analytics.security;
 
-import com.platform.analytics.client.AuthServiceClient;
-import com.platform.analytics.dto.response.TokenValidationResponse;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,18 +18,15 @@ import java.util.List;
 
 /**
  * Intercepts every incoming request, extracts the Bearer token, and
- * delegates validation to the Auth Service via {@link AuthServiceClient}.
- * <p>
- * This service performs NO local JWT parsing/verification — it fully
- * trusts the Auth Service's response, in line with the microservice
- * architecture requirement that authentication is centralized.
+ * validates it locally against Supabase's JWT secret via {@link JwtUtil} -
+ * no network hop to a separate Auth Service.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private final AuthServiceClient authServiceClient;
+    private final JwtUtil jwtUtil;
 
     private static final List<String> PUBLIC_PATHS = List.of(
             "/swagger-ui", "/v3/api-docs", "/actuator/health"
@@ -50,22 +45,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7);
             try {
-                TokenValidationResponse validation = authServiceClient.validateToken(authHeader);
-
-                if (validation != null && validation.isValid()) {
+                if (jwtUtil.isTokenValid(token)) {
                     AuthenticatedUser principal = new AuthenticatedUser(
-                            validation.getUserId(), validation.getEmail(), validation.getRole());
+                            jwtUtil.extractUserId(token), jwtUtil.extractEmail(token), jwtUtil.extractRole(token));
 
                     var authentication = new UsernamePasswordAuthenticationToken(
                             principal,
                             null,
                             List.of(new SimpleGrantedAuthority("ROLE_" +
-                                    (validation.getRole() != null ? validation.getRole() : "USER"))));
+                                    (principal.getRole() != null ? principal.getRole() : "USER"))));
 
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                 } else {
-                    log.warn("Auth Service reported token as invalid for path {}", path);
+                    log.warn("Token failed validation for path {}", path);
                 }
             } catch (Exception ex) {
                 log.error("Token validation failed for path {}: {}", path, ex.getMessage());

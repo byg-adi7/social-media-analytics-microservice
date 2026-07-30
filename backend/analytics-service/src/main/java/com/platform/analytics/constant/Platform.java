@@ -13,7 +13,9 @@ public enum Platform {
     INSTAGRAM("Instagram"),
     TIKTOK("TikTok"),
     FACEBOOK("Facebook"),
-    SPOTIFY("Spotify");
+    SPOTIFY("Spotify"),
+    /** No real API integration exists for this platform - added for CSV import. */
+    TWITTER("Twitter/X");
 
     private final String displayName;
 

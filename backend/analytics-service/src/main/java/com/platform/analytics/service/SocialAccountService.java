@@ -1,8 +1,11 @@
 package com.platform.analytics.service;
 
+import com.platform.analytics.constant.Platform;
 import com.platform.analytics.dto.request.ConnectAccountRequest;
 import com.platform.analytics.dto.request.UpdateAccountRequest;
+import com.platform.analytics.dto.response.CsvImportResponse;
 import com.platform.analytics.dto.response.SocialAccountResponse;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -24,4 +27,10 @@ public interface SocialAccountService {
     void disconnectAccount(UUID userId, UUID accountId);
 
     SocialAccountResponse syncAccount(UUID userId, UUID accountId);
+
+    /** Creates a new CSV_IMPORT account and loads the file's rows as its initial data. */
+    CsvImportResponse importCsv(UUID userId, Platform platform, String accountName, MultipartFile file);
+
+    /** Merges (upserts by date) more CSV rows into an existing CSV_IMPORT account. */
+    CsvImportResponse mergeCsv(UUID userId, UUID accountId, MultipartFile file);
 }
