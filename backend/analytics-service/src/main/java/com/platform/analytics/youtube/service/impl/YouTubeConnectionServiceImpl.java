@@ -15,6 +15,8 @@ import com.platform.analytics.youtube.api.dto.GoogleTokenResponse;
 import com.platform.analytics.youtube.api.dto.YouTubeChannelListResponse;
 import com.platform.analytics.youtube.service.YouTubeConnectionService;
 import com.platform.analytics.youtube.service.YouTubeOAuthService;
+import com.platform.notification.constant.NotificationType;
+import com.platform.notification.service.NotificationService;
 import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -38,6 +41,7 @@ public class YouTubeConnectionServiceImpl implements YouTubeConnectionService {
     private final SocialAccountMapper socialAccountMapper;
     private final AnalyticsSyncService analyticsSyncService;
     private final YouTubeProperties youTubeProperties;
+    private final NotificationService notificationService;
 
     @Override
     public String getAuthorizationUrl(UUID userId) {
@@ -63,14 +67,16 @@ public class YouTubeConnectionServiceImpl implements YouTubeConnectionService {
                 ? channel.snippet().thumbnails().defaultThumb().url()
                 : null;
 
-        SocialAccount account = socialAccountRepository
-                .findByUserIdAndPlatformAndAccountId(userId, Platform.YOUTUBE, channelId)
-                .orElseGet(() -> SocialAccount.builder()
-                        .userId(userId)
-                        .platform(Platform.YOUTUBE)
-                        .accountId(channelId)
-                        .connectedAt(LocalDateTime.now())
-                        .build());
+        Optional<SocialAccount> existing =
+                socialAccountRepository.findByUserIdAndPlatformAndAccountId(userId, Platform.YOUTUBE, channelId);
+        boolean isNewConnection = existing.isEmpty();
+
+        SocialAccount account = existing.orElseGet(() -> SocialAccount.builder()
+                .userId(userId)
+                .platform(Platform.YOUTUBE)
+                .accountId(channelId)
+                .connectedAt(LocalDateTime.now())
+                .build());
 
         account.setAccountName(channelTitle);
         account.setUsername(channelTitle);
@@ -94,7 +100,28 @@ public class YouTubeConnectionServiceImpl implements YouTubeConnectionService {
 
         analyticsSyncService.syncAccount(saved);
 
+        if (isNewConnection) {
+            notifyAccountConnected(saved);
+        }
+
         return socialAccountMapper.toResponse(saved);
+    }
+
+    /**
+     * Best-effort, same reasoning as SocialAccountServiceImpl's identical
+     * method: a failure creating the notification must never fail an
+     * otherwise-successful account connection.
+     */
+    private void notifyAccountConnected(SocialAccount account) {
+        try {
+            notificationService.create(
+                    account.getUserId(),
+                    NotificationType.ACCOUNT_CONNECTED,
+                    "Your YouTube account was connected successfully.");
+        } catch (Exception ex) {
+            log.warn("Failed to send account-connected notification for account {}: {}",
+                    account.getId(), ex.getMessage());
+        }
     }
 
     private YouTubeChannelListResponse.Item fetchChannelIdentity(String accessToken) {

@@ -14,4 +14,5 @@ public interface ReportRepository extends JpaRepository<Report, UUID> {
     // source of truth instead of two competing sort specifications.
     Page<Report> findAllByUserId(UUID userId, Pageable pageable);
     Optional<Report> findByIdAndUserId(UUID id, UUID userId);
+    void deleteAllByUserId(UUID userId);
 }

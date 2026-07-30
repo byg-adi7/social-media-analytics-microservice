@@ -77,6 +77,25 @@ authentication flow.
    the corresponding `*_INTEGRATION_ENABLED=true` and `*_CLIENT_ID`/
    `*_CLIENT_SECRET` (or equivalent) values in `.env`.
 
+## Account deletion cleanup (Supabase webhook)
+
+Since identity lives in Supabase Auth, this service has no other way to
+learn that a user was deleted there. `POST /api/webhooks/user-deleted`
+closes that gap — wire it up via Supabase Database Webhooks:
+
+1. In the Supabase dashboard: **Database → Webhooks → Create a new hook**.
+2. Table: `auth.users`. Events: `Delete` only.
+3. Type: **HTTP Request**, method `POST`, URL
+   `https://<your-render-service>.onrender.com/api/webhooks/user-deleted`.
+4. Add an HTTP header `X-Webhook-Secret` with the same value you set for
+   `USER_DELETION_WEBHOOK_SECRET` in `.env` / on Render.
+
+On receipt, the service deletes that user's social accounts, analytics
+rows, notifications, and reports in one transaction
+(`UserDataCleanupService`). The endpoint is public in `SecurityConfig`
+(Supabase calls it directly, with no user JWT) but rejects any request
+whose `X-Webhook-Secret` doesn't match.
+
 ## Known gaps
 
 - No frontend exists in this repository.

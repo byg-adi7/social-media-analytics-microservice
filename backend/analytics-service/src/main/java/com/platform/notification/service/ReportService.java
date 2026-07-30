@@ -15,4 +15,7 @@ public interface ReportService {
     PagedResponse<ReportSummaryResponse> getForUser(UUID userId, Pageable pageable);
 
     ReportResponse getById(UUID userId, UUID reportId);
+
+    /** Permanently deletes every report belonging to this user. */
+    void deleteAllForUser(UUID userId);
 }

@@ -45,6 +45,11 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     @Override
+    public long getUnreadCount(UUID userId) {
+        return notificationRepository.countByUserIdAndReadFalse(userId);
+    }
+
+    @Override
     @Transactional
     public NotificationResponse markAsRead(UUID userId, UUID notificationId) {
         Notification notification = notificationRepository.findByIdAndUserId(notificationId, userId)
@@ -52,6 +57,20 @@ public class NotificationServiceImpl implements NotificationService {
 
         notification.setRead(true);
         return toResponse(notificationRepository.save(notification));
+    }
+
+    @Override
+    @Transactional
+    public int markAllAsRead(UUID userId) {
+        int updated = notificationRepository.markAllAsReadForUser(userId);
+        log.info("Marked {} notification(s) as read for user {}", updated, userId);
+        return updated;
+    }
+
+    @Override
+    @Transactional
+    public void deleteAllForUser(UUID userId) {
+        notificationRepository.deleteAllByUserId(userId);
     }
 
     private NotificationResponse toResponse(Notification notification) {

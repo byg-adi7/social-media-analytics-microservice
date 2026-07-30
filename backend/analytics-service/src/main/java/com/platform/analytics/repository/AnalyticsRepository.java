@@ -2,6 +2,7 @@ package com.platform.analytics.repository;
 
 import com.platform.analytics.entity.Analytics;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -75,4 +76,10 @@ public interface AnalyticsRepository extends JpaRepository<Analytics, UUID> {
     List<Analytics> findAllByUserIdOrderByDateDesc(@Param("userId") UUID userId);
 
     void deleteBySocialAccountId(UUID socialAccountId);
+
+    // Analytics has no direct userId column (only via socialAccount), so this
+    // needs an explicit bulk-delete query rather than a derived method name.
+    @Modifying
+    @Query("DELETE FROM Analytics a WHERE a.socialAccount.userId = :userId")
+    int deleteAllByUserId(@Param("userId") UUID userId);
 }

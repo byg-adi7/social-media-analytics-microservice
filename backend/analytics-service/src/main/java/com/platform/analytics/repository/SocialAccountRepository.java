@@ -52,4 +52,8 @@ public interface SocialAccountRepository extends JpaRepository<SocialAccount, UU
     // that platform) fail against a fabricated account id/access token.
     @Query("SELECT sa FROM SocialAccount sa WHERE sa.active = true AND sa.connectionType = 'OAUTH'")
     List<SocialAccount> findAllActiveAccounts();
+
+    // Caller must delete this user's Analytics rows first (FK), same as the
+    // single-account disconnect flow in SocialAccountServiceImpl.
+    void deleteAllByUserId(UUID userId);
 }

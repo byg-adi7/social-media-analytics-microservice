@@ -85,6 +85,11 @@ rate-limit:
 oauth:
   state-secret: ${OAUTH_STATE_SECRET:dev-only-change-me-in-production}
 
+# Shared secret expected in the X-Webhook-Secret header of the Supabase
+# Database Webhook fired on auth.users DELETE (see WebhookController).
+webhook:
+  user-deletion-secret: ${USER_DELETION_WEBHOOK_SECRET:dev-only-change-me-in-production}
+
 feign:
   client:
     config:

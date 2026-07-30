@@ -2,6 +2,8 @@ package com.platform.notification.controller;
 
 import com.platform.analytics.dto.response.PagedResponse;
 import com.platform.notification.dto.response.NotificationResponse;
+import com.platform.notification.dto.response.MarkAllReadResponse;
+import com.platform.notification.dto.response.UnreadCountResponse;
 import com.platform.analytics.security.SecurityContextUtil;
 import com.platform.notification.service.NotificationService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -43,11 +45,27 @@ public class NotificationController {
         return notificationService.getForUser(userId, pageable);
     }
 
+    @GetMapping("/unread-count")
+    @Operation(summary = "Get the current user's unread notification count",
+            description = "Cheaper than fetching the full list just to render a badge number.")
+    public UnreadCountResponse getUnreadCount() {
+        UUID userId = SecurityContextUtil.getCurrentUserId();
+        return UnreadCountResponse.builder().unreadCount(notificationService.getUnreadCount(userId)).build();
+    }
+
     @PatchMapping("/{notificationId}/read")
     @Operation(summary = "Mark a notification as read")
     public NotificationResponse markAsRead(@PathVariable UUID notificationId) {
         UUID userId = SecurityContextUtil.getCurrentUserId();
         log.info("Marking notification {} as read for user {}", notificationId, userId);
         return notificationService.markAsRead(userId, notificationId);
+    }
+
+    @PatchMapping("/read-all")
+    @Operation(summary = "Mark all of the current user's notifications as read")
+    public MarkAllReadResponse markAllAsRead() {
+        UUID userId = SecurityContextUtil.getCurrentUserId();
+        int updated = notificationService.markAllAsRead(userId);
+        return MarkAllReadResponse.builder().markedAsRead(updated).build();
     }
 }

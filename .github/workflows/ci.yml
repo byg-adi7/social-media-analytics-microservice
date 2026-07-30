@@ -51,6 +51,7 @@ jobs:
             echo "POSTGRES_DB=audienceinsights"
             echo "SUPABASE_JWT_SECRET=$(openssl rand -base64 32)"
             echo "OAUTH_STATE_SECRET=$(openssl rand -base64 32)"
+            echo "USER_DELETION_WEBHOOK_SECRET=$(openssl rand -base64 32)"
           } > .env
 
       - name: Build and start the full stack

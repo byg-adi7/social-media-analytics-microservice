@@ -45,7 +45,11 @@ public class SecurityConfig {
             "/api/oauth/spotify/callback",
             "/api/oauth/instagram/callback",
             "/api/oauth/tiktok/callback",
-            "/api/oauth/facebook/callback"
+            "/api/oauth/facebook/callback",
+            // Called by Supabase's Database Webhooks feature, not by one of
+            // our own users — authenticated via a shared-secret header
+            // instead (see WebhookController).
+            "/api/webhooks/**"
     };
 
     @Bean

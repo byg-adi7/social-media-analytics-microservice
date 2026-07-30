@@ -56,6 +56,8 @@ services:
         sync: false
       - key: OAUTH_STATE_SECRET
         generateValue: true
+      - key: USER_DELETION_WEBHOOK_SECRET
+        sync: false
       # Real platform OAuth integrations - all optional. Leave unset (stays
       # false / blank) to keep that platform on mock data; see README.md's
       # "Real <Platform> Integration" sections before enabling one for real.
