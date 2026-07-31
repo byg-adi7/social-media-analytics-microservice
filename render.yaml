@@ -69,11 +69,14 @@ services:
       # http://localhost:3000 if left unset, which is wrong for production.
       - key: CORS_ALLOWED_ORIGINS
         sync: false
-      # Push notifications (Firebase Cloud Messaging) - optional. Leave
-      # FIREBASE_ENABLED false to keep in-app notifications working without
-      # push; see README.md "Enabling push notifications (FCM)".
+      # Push notifications (Firebase Cloud Messaging) - optional. Both
+      # sync:false (not a fixed blueprint value) so switching this on in
+      # the Render dashboard sticks across future blueprint re-syncs,
+      # instead of being silently reset back to a hardcoded default. Enter
+      # "false" here to keep in-app notifications working without push;
+      # see README.md "Enabling push notifications (FCM)".
       - key: FIREBASE_ENABLED
-        value: false
+        sync: false
       - key: FIREBASE_SERVICE_ACCOUNT_BASE64
         sync: false
       # Real platform OAuth integrations - all optional. Leave unset (stays
