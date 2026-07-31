@@ -463,7 +463,7 @@ JWT:
 | `{PLATFORM}_INTEGRATION_ENABLED` | false | Per-platform master switch (YOUTUBE/SPOTIFY/INSTAGRAM/TIKTOK/FACEBOOK) |
 | `{PLATFORM}_CLIENT_ID` / `_CLIENT_SECRET` (or `_KEY` for TikTok, `_APP_ID` for Facebook) | — | Per-platform OAuth credentials |
 | `{PLATFORM}_REDIRECT_URI` | `http://localhost:8002/api/oauth/{platform}/callback` | Must match the value registered on that platform's developer console |
-| `{PLATFORM}_FRONTEND_REDIRECT` | `http://localhost:3000/dashboard` | Where the browser lands after a successful connect |
+| `{PLATFORM}_FRONTEND_REDIRECT` | `audience-insights://oauth-callback` | Mobile deep link (not a web URL) the app lands on after a successful connect — matches `app.json`'s `"scheme"` |
 
 ---
 

@@ -262,16 +262,26 @@ Identical shape for all 5 real-integration platforms — replace
 | GET | `/api/oauth/{platform}/authorize` | Yes | Returns `{authorizationUrl}` — redirect the browser here |
 | GET | `/api/oauth/{platform}/callback` | **No (public)** | The platform redirects here after consent, not the frontend — never call this directly |
 
-Frontend flow:
+Frontend flow (mirrors `authService.signInWithGoogle()`'s existing pattern
+for Supabase's own OAuth):
 1. User taps "Connect YouTube" → `GET /api/oauth/youtube/authorize`
    (authenticated) → `{"authorizationUrl": "https://accounts.google.com/..."}`.
-2. Open that URL (in-app browser / `expo-web-browser`).
+2. Open it with `WebBrowser.openAuthSessionAsync(authorizationUrl,
+   Linking.createURL('oauth-callback'))` — the second argument tells Expo
+   which redirect to watch for so it can auto-close the in-app browser.
 3. User consents on the platform's own site.
 4. Platform redirects to the backend's `/callback`, which completes the
-   connection, then **redirects again** to:
-   `{FRONTEND_REDIRECT_URI}?connected={platform}&accountId={uuid}`.
-5. The frontend's redirect target should read these query params to show
-   a success message / refresh the account list.
+   connection, then redirects to the mobile deep link configured in
+   `{PLATFORM}_FRONTEND_REDIRECT` (default: `audience-insights://oauth-callback`),
+   appending `?connected={platform}&accountId={uuid}`.
+5. `openAuthSessionAsync` resolves with that final URL — parse
+   `connected`/`accountId` off it (same as `result.url` is already parsed
+   for `access_token`/`refresh_token` in the Google sign-in flow) to show a
+   success message / refresh the account list.
+
+**This is a deep link, not a web page** — there is no localhost:3000 or
+any other web frontend involved. `{PLATFORM}_FRONTEND_REDIRECT` must match
+a URL scheme the app itself can receive, i.e. `app.json`'s `"scheme"`.
 
 Only produces real data if real credentials for that platform are
 configured in the backend's `.env` — otherwise the platform is disabled

@@ -42,6 +42,9 @@ public class SpotifyProperties {
 
     /**
      * Where to send the user's browser after the OAuth callback completes.
+     * The frontend is a mobile app (Expo/React Native), not a web page, so
+     * this is a deep link (app.json's "scheme") the app registers a
+     * listener for via Linking - not an http(s) URL.
      */
-    private String frontendRedirectUri = "http://localhost:3000/dashboard";
+    private String frontendRedirectUri = "audience-insights://oauth-callback";
 }

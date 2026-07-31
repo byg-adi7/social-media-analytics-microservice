@@ -29,27 +29,27 @@ analytics:
 youtube:
   enabled: false
   redirect-uri: http://localhost:8082/api/oauth/youtube/callback
-  frontend-redirect-uri: http://localhost:3000/dashboard
+  frontend-redirect-uri: audience-insights://oauth-callback
 
 spotify:
   enabled: false
   redirect-uri: http://localhost:8082/api/oauth/spotify/callback
-  frontend-redirect-uri: http://localhost:3000/dashboard
+  frontend-redirect-uri: audience-insights://oauth-callback
 
 instagram:
   enabled: false
   redirect-uri: http://localhost:8082/api/oauth/instagram/callback
-  frontend-redirect-uri: http://localhost:3000/dashboard
+  frontend-redirect-uri: audience-insights://oauth-callback
 
 tiktok:
   enabled: false
   redirect-uri: http://localhost:8082/api/oauth/tiktok/callback
-  frontend-redirect-uri: http://localhost:3000/dashboard
+  frontend-redirect-uri: audience-insights://oauth-callback
 
 facebook:
   enabled: false
   redirect-uri: http://localhost:8082/api/oauth/facebook/callback
-  frontend-redirect-uri: http://localhost:3000/dashboard
+  frontend-redirect-uri: audience-insights://oauth-callback
 
 oauth:
   state-secret: test-secret

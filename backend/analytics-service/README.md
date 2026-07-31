@@ -193,13 +193,15 @@ YOUTUBE_INTEGRATION_ENABLED=true
 YOUTUBE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 YOUTUBE_CLIENT_SECRET=your-client-secret
 YOUTUBE_REDIRECT_URI=http://localhost:8082/api/oauth/youtube/callback
-YOUTUBE_FRONTEND_REDIRECT=http://localhost:3000/dashboard
+YOUTUBE_FRONTEND_REDIRECT=audience-insights://oauth-callback
 OAUTH_STATE_SECRET=some-long-random-production-secret
 ```
 
-4. Frontend flow: call `GET /api/oauth/youtube/authorize` (authenticated) → redirect the browser to the returned `authorizationUrl` → after the user approves, Google redirects to the public `/api/oauth/youtube/callback` endpoint → the service exchanges the code, fetches the channel, saves/updates the `SocialAccount`, runs an initial sync, and redirects the browser to `YOUTUBE_FRONTEND_REDIRECT`.
+4. Frontend flow: call `GET /api/oauth/youtube/authorize` (authenticated) → open the returned `authorizationUrl` in an in-app browser (e.g. Expo's `expo-web-browser`) → after the user approves, Google redirects to the public `/api/oauth/youtube/callback` endpoint → the service exchanges the code, fetches the channel, saves/updates the `SocialAccount`, runs an initial sync, and redirects to `YOUTUBE_FRONTEND_REDIRECT`.
 
 The OAuth `state` parameter is HMAC-signed (`StateTokenService`) rather than relying on server-side sessions, since the callback is a public endpoint that never carries the caller's JWT.
+
+**`*_FRONTEND_REDIRECT` is a mobile deep link, not a web URL.** The frontend is Expo/React Native, so this must be a URL scheme the app itself registers a handler for (`app.json`'s `"scheme"`) — `audience-insights://oauth-callback` by default, matching this app's existing `Linking.createURL(...)` pattern already used for the Supabase Google sign-in flow. The redirecting browser session should be opened via `WebBrowser.openAuthSessionAsync(authorizationUrl, Linking.createURL('oauth-callback'))` so Expo can intercept the redirect and close the browser automatically, the same way `authService.signInWithGoogle()` already does for Supabase's own OAuth.
 
 ---
 
@@ -243,7 +245,7 @@ SPOTIFY_INTEGRATION_ENABLED=true
 SPOTIFY_CLIENT_ID=your-client-id
 SPOTIFY_CLIENT_SECRET=your-client-secret
 SPOTIFY_REDIRECT_URI=http://localhost:8082/api/oauth/spotify/callback
-SPOTIFY_FRONTEND_REDIRECT=http://localhost:3000/dashboard
+SPOTIFY_FRONTEND_REDIRECT=audience-insights://oauth-callback
 OAUTH_STATE_SECRET=some-long-random-production-secret
 ```
 
@@ -303,7 +305,7 @@ INSTAGRAM_INTEGRATION_ENABLED=true
 INSTAGRAM_CLIENT_ID=your-instagram-app-id
 INSTAGRAM_CLIENT_SECRET=your-instagram-app-secret
 INSTAGRAM_REDIRECT_URI=http://localhost:8082/api/oauth/instagram/callback
-INSTAGRAM_FRONTEND_REDIRECT=http://localhost:3000/dashboard
+INSTAGRAM_FRONTEND_REDIRECT=audience-insights://oauth-callback
 OAUTH_STATE_SECRET=some-long-random-production-secret
 ```
 
@@ -348,7 +350,7 @@ TIKTOK_INTEGRATION_ENABLED=true
 TIKTOK_CLIENT_KEY=your-tiktok-client-key
 TIKTOK_CLIENT_SECRET=your-tiktok-client-secret
 TIKTOK_REDIRECT_URI=http://localhost:8082/api/oauth/tiktok/callback
-TIKTOK_FRONTEND_REDIRECT=http://localhost:3000/dashboard
+TIKTOK_FRONTEND_REDIRECT=audience-insights://oauth-callback
 OAUTH_STATE_SECRET=some-long-random-production-secret
 ```
 
@@ -412,7 +414,7 @@ FACEBOOK_INTEGRATION_ENABLED=true
 FACEBOOK_APP_ID=your-facebook-app-id
 FACEBOOK_APP_SECRET=your-facebook-app-secret
 FACEBOOK_REDIRECT_URI=http://localhost:8082/api/oauth/facebook/callback
-FACEBOOK_FRONTEND_REDIRECT=http://localhost:3000/dashboard
+FACEBOOK_FRONTEND_REDIRECT=audience-insights://oauth-callback
 OAUTH_STATE_SECRET=some-long-random-production-secret
 ```
 
@@ -443,23 +445,23 @@ Scaling past a handful of testers to real external users requires Meta **App Rev
 | `YOUTUBE_INTEGRATION_ENABLED` | false | Enable the real YouTube Data API / OAuth integration |
 | `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET` | — | Google OAuth 2.0 credentials |
 | `YOUTUBE_REDIRECT_URI` | http://localhost:8082/api/oauth/youtube/callback | Must match the Google Cloud Console redirect URI |
-| `YOUTUBE_FRONTEND_REDIRECT` | http://localhost:3000/dashboard | Where the browser lands after a successful connect |
+| `YOUTUBE_FRONTEND_REDIRECT` | audience-insights://oauth-callback | Where the browser lands after a successful connect |
 | `SPOTIFY_INTEGRATION_ENABLED` | false | Enable the real Spotify Web API / OAuth integration |
 | `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` | — | Spotify OAuth 2.0 credentials |
 | `SPOTIFY_REDIRECT_URI` | http://localhost:8082/api/oauth/spotify/callback | Must match the Spotify Developer Dashboard redirect URI |
-| `SPOTIFY_FRONTEND_REDIRECT` | http://localhost:3000/dashboard | Where the browser lands after a successful connect |
+| `SPOTIFY_FRONTEND_REDIRECT` | audience-insights://oauth-callback | Where the browser lands after a successful connect |
 | `INSTAGRAM_INTEGRATION_ENABLED` | false | Enable the real Instagram Graph API / OAuth integration |
 | `INSTAGRAM_CLIENT_ID` / `INSTAGRAM_CLIENT_SECRET` | — | Meta app ID/secret ("Business Login for Instagram" product) |
 | `INSTAGRAM_REDIRECT_URI` | http://localhost:8082/api/oauth/instagram/callback | Must match the Meta app's configured redirect URI |
-| `INSTAGRAM_FRONTEND_REDIRECT` | http://localhost:3000/dashboard | Where the browser lands after a successful connect |
+| `INSTAGRAM_FRONTEND_REDIRECT` | audience-insights://oauth-callback | Where the browser lands after a successful connect |
 | `TIKTOK_INTEGRATION_ENABLED` | false | Enable the real TikTok Display API / OAuth integration |
 | `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` | — | TikTok Login Kit client key/secret |
 | `TIKTOK_REDIRECT_URI` | http://localhost:8082/api/oauth/tiktok/callback | Must match the TikTok Developer app's configured redirect URI |
-| `TIKTOK_FRONTEND_REDIRECT` | http://localhost:3000/dashboard | Where the browser lands after a successful connect |
+| `TIKTOK_FRONTEND_REDIRECT` | audience-insights://oauth-callback | Where the browser lands after a successful connect |
 | `FACEBOOK_INTEGRATION_ENABLED` | false | Enable the real Facebook Graph API / OAuth integration |
 | `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` | — | Meta app ID/secret (Facebook Login product) |
 | `FACEBOOK_REDIRECT_URI` | http://localhost:8082/api/oauth/facebook/callback | Must match the Meta app's configured redirect URI |
-| `FACEBOOK_FRONTEND_REDIRECT` | http://localhost:3000/dashboard | Where the browser lands after a successful connect |
+| `FACEBOOK_FRONTEND_REDIRECT` | audience-insights://oauth-callback | Where the browser lands after a successful connect |
 | `OAUTH_STATE_SECRET` | dev-only-change-me-in-production | HMAC secret signing the OAuth `state` parameter for every platform's connect flow — **set a strong value in production** |
 
 ### Run Locally

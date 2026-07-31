@@ -143,7 +143,7 @@ youtube:
   auth-uri: https://accounts.google.com/o/oauth2/v2/auth
   token-uri: https://oauth2.googleapis.com/token
   api-base-url: https://www.googleapis.com/youtube/v3
-  frontend-redirect-uri: ${YOUTUBE_FRONTEND_REDIRECT:http://localhost:3000/dashboard}
+  frontend-redirect-uri: ${YOUTUBE_FRONTEND_REDIRECT:audience-insights://oauth-callback}
 
 # Real Spotify Web API / OAuth 2.0 integration.
 # Disabled by default — MockSocialMediaClient handles Spotify accounts
@@ -160,7 +160,7 @@ spotify:
   auth-uri: https://accounts.spotify.com/authorize
   token-uri: https://accounts.spotify.com/api/token
   api-base-url: https://api.spotify.com/v1
-  frontend-redirect-uri: ${SPOTIFY_FRONTEND_REDIRECT:http://localhost:3000/dashboard}
+  frontend-redirect-uri: ${SPOTIFY_FRONTEND_REDIRECT:audience-insights://oauth-callback}
 
 # Real Instagram Graph API / "Business Login for Instagram" OAuth 2.0
 # integration. Disabled by default — MockSocialMediaClient handles
@@ -177,7 +177,7 @@ instagram:
   auth-uri: https://www.instagram.com/oauth/authorize
   short-lived-token-uri: https://api.instagram.com/oauth/access_token
   graph-base-url: https://graph.instagram.com
-  frontend-redirect-uri: ${INSTAGRAM_FRONTEND_REDIRECT:http://localhost:3000/dashboard}
+  frontend-redirect-uri: ${INSTAGRAM_FRONTEND_REDIRECT:audience-insights://oauth-callback}
 
 # Real TikTok Display API / Login Kit OAuth 2.0 integration.
 # Disabled by default — MockSocialMediaClient handles TikTok accounts
@@ -194,7 +194,7 @@ tiktok:
   auth-uri: https://www.tiktok.com/v2/auth/authorize/
   token-uri: https://open.tiktokapis.com/v2/oauth/token/
   api-base-url: https://open.tiktokapis.com
-  frontend-redirect-uri: ${TIKTOK_FRONTEND_REDIRECT:http://localhost:3000/dashboard}
+  frontend-redirect-uri: ${TIKTOK_FRONTEND_REDIRECT:audience-insights://oauth-callback}
 
 # Real Facebook Graph API / Facebook Login integration (Page-scoped).
 # Disabled by default — MockSocialMediaClient handles Facebook accounts
@@ -209,7 +209,7 @@ facebook:
   scope: "pages_show_list,pages_read_engagement,pages_read_user_content,read_insights"
   auth-uri: https://www.facebook.com/v25.0/dialog/oauth
   graph-base-url: https://graph.facebook.com/v25.0
-  frontend-redirect-uri: ${FACEBOOK_FRONTEND_REDIRECT:http://localhost:3000/dashboard}
+  frontend-redirect-uri: ${FACEBOOK_FRONTEND_REDIRECT:audience-insights://oauth-callback}
 
 jwt:
   header: Authorization
