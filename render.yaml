@@ -56,7 +56,14 @@ services:
         sync: false
       - key: OAUTH_STATE_SECRET
         generateValue: true
-      - key: USER_DELETION_WEBHOOK_SECRET
+      - key: SUPABASE_WEBHOOK_SECRET
+        sync: false
+      # Push notifications (Firebase Cloud Messaging) - optional. Leave
+      # FIREBASE_ENABLED false to keep in-app notifications working without
+      # push; see README.md "Enabling push notifications (FCM)".
+      - key: FIREBASE_ENABLED
+        value: false
+      - key: FIREBASE_SERVICE_ACCOUNT_BASE64
         sync: false
       # Real platform OAuth integrations - all optional. Leave unset (stays
       # false / blank) to keep that platform on mock data; see README.md's

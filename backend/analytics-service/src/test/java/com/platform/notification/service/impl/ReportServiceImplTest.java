@@ -83,7 +83,7 @@ class ReportServiceImplTest {
 
         assertThat(response.getStatus()).isEqualTo(ReportStatus.COMPLETED);
         assertThat(response.getContent()).contains("YOUTUBE").contains("followers");
-        verify(notificationService).create(eq(userId), eq(NotificationType.REPORT_READY), any());
+        verify(notificationService).notifyUser(eq(userId), eq(NotificationType.REPORT_READY), any(), any(), any());
     }
 
     @Test
@@ -98,7 +98,7 @@ class ReportServiceImplTest {
                 .isInstanceOf(ExternalApiException.class);
 
         verify(reportRepository).save(argThatStatusIs(ReportStatus.FAILED));
-        verify(notificationService, never()).create(any(), any(), any());
+        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any());
     }
 
     @Test

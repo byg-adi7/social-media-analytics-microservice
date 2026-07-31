@@ -30,6 +30,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -94,10 +95,12 @@ public class SocialAccountServiceImpl implements SocialAccountService {
      */
     private void notifyAccountConnected(SocialAccount account) {
         try {
-            notificationService.create(
+            notificationService.notifyUser(
                     account.getUserId(),
                     NotificationType.ACCOUNT_CONNECTED,
-                    "Your " + account.getPlatform().getDisplayName() + " account was connected successfully.");
+                    "Account connected",
+                    "Your " + account.getPlatform().getDisplayName() + " account was connected successfully.",
+                    Map.of("accountId", account.getId().toString()));
         } catch (Exception ex) {
             log.warn("Failed to send account-connected notification for account {}: {}",
                     account.getId(), ex.getMessage());
@@ -157,7 +160,31 @@ public class SocialAccountServiceImpl implements SocialAccountService {
                     "This account's data comes from a CSV upload, not a live sync - upload a new CSV to update it");
         }
         analyticsSyncService.syncAccount(account);
+
+        // Only for this user-triggered on-demand sync, never the routine
+        // scheduled batch (AnalyticsSyncServiceImpl.syncAllActiveAccounts) -
+        // that runs hourly for every active account, and a notification on
+        // every routine success would be daily spam, not useful signal.
+        notifySyncSuccess(account);
+
         return socialAccountMapper.toResponse(account);
+    }
+
+    /**
+     * Best-effort, same reasoning as notifyAccountConnected: a failure
+     * creating the notification must never fail an otherwise-successful sync.
+     */
+    private void notifySyncSuccess(SocialAccount account) {
+        try {
+            notificationService.notifyUser(
+                    account.getUserId(),
+                    NotificationType.SYNC_SUCCESS,
+                    "Sync complete",
+                    "Your " + account.getPlatform().getDisplayName() + " account was synced successfully.",
+                    Map.of("accountId", account.getId().toString()));
+        } catch (Exception ex) {
+            log.warn("Failed to send sync-success notification for account {}: {}", account.getId(), ex.getMessage());
+        }
     }
 
     private SocialAccount findAccountOrThrow(UUID userId, UUID accountId) {
@@ -214,11 +241,32 @@ public class SocialAccountServiceImpl implements SocialAccountService {
         log.info("Merged {} CSV row(s) ({} new, {} updated) into account {} for user {}",
                 rows.size(), counts.inserted(), counts.updated(), accountId, userId);
 
+        notifyAnalysisCompleted(account, counts);
+
         return CsvImportResponse.builder()
                 .account(socialAccountMapper.toResponse(account))
                 .rowsInserted(counts.inserted())
                 .rowsUpdated(counts.updated())
                 .build();
+    }
+
+    /**
+     * Best-effort, same reasoning as notifyAccountConnected: a failure
+     * creating the notification must never fail an otherwise-successful merge.
+     */
+    private void notifyAnalysisCompleted(SocialAccount account, UpsertCounts counts) {
+        try {
+            notificationService.notifyUser(
+                    account.getUserId(),
+                    NotificationType.ANALYSIS_COMPLETED,
+                    "Analysis ready",
+                    "Your uploaded " + account.getPlatform().getDisplayName() + " data has been analyzed ("
+                            + counts.inserted() + " new, " + counts.updated() + " updated day(s)).",
+                    Map.of("accountId", account.getId().toString()));
+        } catch (Exception ex) {
+            log.warn("Failed to send analysis-completed notification for account {}: {}",
+                    account.getId(), ex.getMessage());
+        }
     }
 
     private record UpsertCounts(int inserted, int updated) {

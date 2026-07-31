@@ -85,10 +85,19 @@ rate-limit:
 oauth:
   state-secret: ${OAUTH_STATE_SECRET:dev-only-change-me-in-production}
 
-# Shared secret expected in the X-Webhook-Secret header of the Supabase
-# Database Webhook fired on auth.users DELETE (see WebhookController).
+# Shared secret expected in the X-Webhook-Secret header of every Supabase
+# Database Webhook call (auth.users insert/update/delete - see WebhookController).
 webhook:
-  user-deletion-secret: ${USER_DELETION_WEBHOOK_SECRET:dev-only-change-me-in-production}
+  supabase-secret: ${SUPABASE_WEBHOOK_SECRET:dev-only-change-me-in-production}
+
+# Firebase Cloud Messaging (push notifications). Disabled by default -
+# NoopFcmPushNotificationService handles the push channel (in-app
+# notifications still work fully) until real Firebase credentials are
+# supplied. See README.md "Enabling push notifications (FCM)".
+firebase:
+  enabled: ${FIREBASE_ENABLED:false}
+  service-account-base64: ${FIREBASE_SERVICE_ACCOUNT_BASE64:}
+  service-account-path: ${FIREBASE_SERVICE_ACCOUNT_PATH:}
 
 feign:
   client:

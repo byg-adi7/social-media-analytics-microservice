@@ -101,7 +101,7 @@ class SocialAccountServiceImplTest {
         assertThat(response.getId()).isEqualTo(accountId);
         verify(platformValidator).validate(Platform.YOUTUBE);
         verify(analyticsSyncService).syncAccount(account);
-        verify(notificationService).create(eq(userId), any(), any());
+        verify(notificationService).notifyUser(eq(userId), any(), any(), any(), any());
     }
 
     @Test
@@ -118,7 +118,7 @@ class SocialAccountServiceImplTest {
         when(socialAccountRepository.save(any(SocialAccount.class))).thenReturn(account);
         when(socialAccountMapper.toResponse(account)).thenReturn(SocialAccountResponse.builder().id(accountId).build());
         doThrow(new RuntimeException("notification create failed"))
-                .when(notificationService).create(any(), any(), any());
+                .when(notificationService).notifyUser(any(), any(), any(), any(), any());
 
         // A notification-creation failure must not fail an otherwise-successful connect.
         SocialAccountResponse response = socialAccountService.connectAccount(userId, request);
@@ -242,7 +242,7 @@ class SocialAccountServiceImplTest {
         verify(analyticsRepository, times(2)).save(any(Analytics.class));
         // CSV import is not a live sync - must never trigger the sync service.
         verify(analyticsSyncService, never()).syncAccount(any());
-        verify(notificationService).create(eq(userId), any(), any());
+        verify(notificationService).notifyUser(eq(userId), any(), any(), any(), any());
 
         var accountCaptor = org.mockito.ArgumentCaptor.forClass(SocialAccount.class);
         verify(socialAccountRepository, atLeastOnce()).save(accountCaptor.capture());

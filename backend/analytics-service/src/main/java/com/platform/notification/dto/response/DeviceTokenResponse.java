@@ -1,6 +1,6 @@
 package com.platform.notification.dto.response;
 
-import com.platform.notification.constant.NotificationType;
+import com.platform.notification.constant.DevicePlatform;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -13,13 +13,10 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class NotificationResponse {
+public class DeviceTokenResponse {
     private UUID id;
-    private NotificationType type;
-    private String title;
-    private String message;
-    private String data;
-    private boolean read;
+    private DevicePlatform platform;
+    private boolean active;
     private LocalDateTime createdAt;
-    private LocalDateTime readAt;
+    private LocalDateTime lastUsedAt;
 }

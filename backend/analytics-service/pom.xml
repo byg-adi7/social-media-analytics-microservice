@@ -113,6 +113,15 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Firebase Admin SDK (FCM push notifications). Only initialized when
+             firebase.enabled=true - see FirebaseConfig; otherwise
+             NoopFcmPushNotificationService handles the push channel. -->
+        <dependency>
+            <groupId>com.google.firebase</groupId>
+            <artifactId>firebase-admin</artifactId>
+            <version>9.3.0</version>
+        </dependency>
+
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>

@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -137,11 +138,13 @@ public class AnalyticsSyncServiceImpl implements AnalyticsSyncService {
      */
     private void notifySyncFailure(SocialAccount account) {
         try {
-            notificationService.create(
+            notificationService.notifyUser(
                     account.getUserId(),
                     NotificationType.SYNC_FAILURE,
+                    "Sync failed",
                     "We couldn't sync your " + account.getPlatform().getDisplayName()
-                            + " account. We'll try again on the next scheduled sync.");
+                            + " account. We'll try again on the next scheduled sync.",
+                    Map.of("accountId", account.getId().toString()));
         } catch (Exception ex) {
             log.warn("Failed to send sync-failure notification for account {}: {}",
                     account.getId(), ex.getMessage());

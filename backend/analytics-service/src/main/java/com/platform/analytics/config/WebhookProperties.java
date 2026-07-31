@@ -16,7 +16,10 @@ public class WebhookProperties {
 
     /**
      * Shared secret this server expects in the X-Webhook-Secret header of
-     * the Supabase Database Webhook call fired on auth.users DELETE.
+     * every Supabase Database Webhook call (auth.users INSERT/UPDATE/DELETE -
+     * see WebhookController). One shared secret across all three since
+     * they're all the same trusted caller (Supabase), not three independent
+     * integrations.
      */
-    private String userDeletionSecret;
+    private String supabaseSecret;
 }

@@ -85,7 +85,13 @@ class YouTubeConnectionServiceImplTest {
                 .thenReturn(new YouTubeChannelListResponse.Response(List.of(item)));
 
         when(socialAccountRepository.save(any(SocialAccount.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+                .thenAnswer(invocation -> {
+                    SocialAccount a = invocation.getArgument(0);
+                    if (a.getId() == null) {
+                        a.setId(UUID.randomUUID());
+                    }
+                    return a;
+                });
         when(socialAccountMapper.toResponse(any(SocialAccount.class)))
                 .thenReturn(SocialAccountResponse.builder().build());
     }
@@ -101,7 +107,7 @@ class YouTubeConnectionServiceImplTest {
 
         youTubeConnectionService.completeConnection(CODE, STATE);
 
-        verify(notificationService).create(eq(userId), eq(NotificationType.ACCOUNT_CONNECTED), anyString());
+        verify(notificationService).notifyUser(eq(userId), eq(NotificationType.ACCOUNT_CONNECTED), anyString(), anyString(), any());
     }
 
     @Test
@@ -118,7 +124,7 @@ class YouTubeConnectionServiceImplTest {
 
         youTubeConnectionService.completeConnection(CODE, STATE);
 
-        verify(notificationService, never()).create(any(), any(), anyString());
+        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any());
     }
 
     @Test

@@ -77,28 +77,55 @@ authentication flow.
    the corresponding `*_INTEGRATION_ENABLED=true` and `*_CLIENT_ID`/
    `*_CLIENT_SECRET` (or equivalent) values in `.env`.
 
-## Account deletion cleanup (Supabase webhook)
+## Supabase auth.users webhooks
 
-Since identity lives in Supabase Auth, this service has no other way to
-learn that a user was deleted there. `POST /api/webhooks/user-deleted`
-closes that gap — wire it up via Supabase Database Webhooks:
+Since identity lives entirely in Supabase Auth, this service has no other
+way to learn about signups, password changes, or deletions there. Three
+endpoints close that gap, all wired up the same way via **Supabase
+Database Webhooks** (Dashboard → Database → Webhooks → Create a new hook →
+table `auth.users`), and all authenticated by the same shared secret in an
+`X-Webhook-Secret` header (`SUPABASE_WEBHOOK_SECRET` in `.env` / on Render)
+rather than a user JWT — Supabase calls these directly, not one of our own
+users:
 
-1. In the Supabase dashboard: **Database → Webhooks → Create a new hook**.
-2. Table: `auth.users`. Events: `Delete` only.
-3. Type: **HTTP Request**, method `POST`, URL
-   `https://<your-render-service>.onrender.com/api/webhooks/user-deleted`.
-4. Add an HTTP header `X-Webhook-Secret` with the same value you set for
-   `USER_DELETION_WEBHOOK_SECRET` in `.env` / on Render.
+| Event | Endpoint | Effect |
+|---|---|---|
+| Insert | `POST /api/webhooks/user-created` | Sends a `WELCOME` notification. |
+| Update | `POST /api/webhooks/user-updated` | Compares `record`/`old_record`'s `encrypted_password` - if it actually changed (not just any other field on the row), sends a `PASSWORD_CHANGED` notification. The hash values are only ever compared, never logged or persisted. |
+| Delete | `POST /api/webhooks/user-deleted` | Deletes that user's social accounts, analytics rows, notifications, reports, device tokens, and notification preferences in one transaction (`UserDataCleanupService`). |
 
-On receipt, the service deletes that user's social accounts, analytics
-rows, notifications, and reports in one transaction
-(`UserDataCleanupService`). The endpoint is public in `SecurityConfig`
-(Supabase calls it directly, with no user JWT) but rejects any request
-whose `X-Webhook-Secret` doesn't match.
+All three are public in `SecurityConfig` but reject any request whose
+`X-Webhook-Secret` doesn't match.
+
+## Push notifications (Firebase Cloud Messaging)
+
+In-app notifications (the `/api/notifications` list, unread count, etc.)
+work fully with zero setup. Pushing them to a user's phone additionally
+requires a Firebase project:
+
+1. Firebase Console → Project Settings → Service Accounts → **Generate new
+   private key** (downloads a JSON file). Never commit this file.
+2. Base64-encode it into one line: `base64 -w0 service-account.json`
+   (macOS: `base64 -i service-account.json | tr -d '\n'`).
+3. Set `FIREBASE_ENABLED=true` and `FIREBASE_SERVICE_ACCOUNT_BASE64=<that
+   string>` in `.env` / on Render. (`FIREBASE_SERVICE_ACCOUNT_PATH` is a
+   local-dev alternative: a filesystem path to the same JSON file, ignored
+   if the base64 var is set.)
+4. The mobile app registers its FCM device token via
+   `POST /api/devices/register` (see `FRONTEND_INTEGRATION_GUIDE.md`).
+
+With `FIREBASE_ENABLED=false` (the default), `NoopFcmPushNotificationService`
+handles the push channel - i.e. it does nothing - so the rest of the stack
+runs identically either way. A user can also turn push off for themselves
+without touching Firebase at all, via `PUT /api/notifications/preferences`
+(`pushEnabled: false`) - the in-app notification is still created either way,
+only the push send is skipped.
 
 ## Known gaps
 
 - No frontend exists in this repository.
 - The `subscriptions`/billing feature referenced in `database/schema.sql`
   (a deprecated, no-longer-applied seed script — see its header comment)
-  was never implemented by any service.
+  was never implemented by any service. `NotificationType.SUBSCRIPTION_SUCCESS`/
+  `SUBSCRIPTION_EXPIRING` exist for forward compatibility only and are not
+  fired by any code path yet.

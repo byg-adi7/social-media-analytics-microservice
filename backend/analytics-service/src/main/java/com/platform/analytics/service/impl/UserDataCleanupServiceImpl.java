@@ -3,6 +3,8 @@ package com.platform.analytics.service.impl;
 import com.platform.analytics.repository.AnalyticsRepository;
 import com.platform.analytics.repository.SocialAccountRepository;
 import com.platform.analytics.service.UserDataCleanupService;
+import com.platform.notification.service.DeviceTokenService;
+import com.platform.notification.service.NotificationPreferenceService;
 import com.platform.notification.service.NotificationService;
 import com.platform.notification.service.ReportService;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +23,8 @@ public class UserDataCleanupServiceImpl implements UserDataCleanupService {
     private final SocialAccountRepository socialAccountRepository;
     private final NotificationService notificationService;
     private final ReportService reportService;
+    private final DeviceTokenService deviceTokenService;
+    private final NotificationPreferenceService notificationPreferenceService;
 
     @Override
     @Transactional
@@ -31,7 +35,9 @@ public class UserDataCleanupServiceImpl implements UserDataCleanupService {
         socialAccountRepository.deleteAllByUserId(userId);
         notificationService.deleteAllForUser(userId);
         reportService.deleteAllForUser(userId);
-        log.info("Deleted all data for user {}: {} analytics row(s), plus their accounts/notifications/reports",
-                userId, analyticsDeleted);
+        deviceTokenService.deleteAllForUser(userId);
+        notificationPreferenceService.deleteAllForUser(userId);
+        log.info("Deleted all data for user {}: {} analytics row(s), plus their accounts/notifications/reports/"
+                + "device tokens/preferences", userId, analyticsDeleted);
     }
 }

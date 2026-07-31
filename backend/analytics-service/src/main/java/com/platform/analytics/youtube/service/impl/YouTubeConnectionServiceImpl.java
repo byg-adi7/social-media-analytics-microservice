@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -114,10 +115,12 @@ public class YouTubeConnectionServiceImpl implements YouTubeConnectionService {
      */
     private void notifyAccountConnected(SocialAccount account) {
         try {
-            notificationService.create(
+            notificationService.notifyUser(
                     account.getUserId(),
                     NotificationType.ACCOUNT_CONNECTED,
-                    "Your YouTube account was connected successfully.");
+                    "Account connected",
+                    "Your YouTube account was connected successfully.",
+                    Map.of("accountId", account.getId().toString()));
         } catch (Exception ex) {
             log.warn("Failed to send account-connected notification for account {}: {}",
                     account.getId(), ex.getMessage());

@@ -299,17 +299,56 @@ gracefully** (empty maps are normal, not a bug):
 |---|---|---|
 | GET | `/api/dashboard` | `{totalFollowers, totalViews, totalLikes, totalComments, totalShares, totalReach, totalImpressions, averageEngagement, connectedPlatforms: string[], bestPerformingPlatform, lastSyncTime}` |
 
-#### Notification Service (`/api/notifications/*`)
+#### Notifications (`/api/notifications/*`)
 
 All authenticated. Notifications are always system-generated — there is
-no endpoint for a user to create their own.
+no endpoint for a user to create their own. List/unread-count reflect
+in-app notifications only; whether a push notification was *also* sent to
+a device depends on `firebase.enabled` and the user's own preference (see
+Device registration below).
 
-| Method | Path | Response |
-|---|---|---|
-| GET | `/api/notifications` | `[{id, type, message, read, createdAt}]`, most recent first |
-| PATCH | `/api/notifications/{id}/read` | Updated notification object |
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/api/notifications?page=&size=` | — | `PagedResponse<NotificationResponse>`, most recent first |
+| GET | `/api/notifications/unread-count` | — | `{unreadCount}` |
+| PATCH | `/api/notifications/{id}/read` | — | Updated `NotificationResponse` |
+| PATCH | `/api/notifications/read-all` | — | `{markedAsRead}` |
+| GET | `/api/notifications/preferences` | — | `{pushEnabled, emailEnabled}` (defaults to both `true` if never set) |
+| PUT | `/api/notifications/preferences` | `{pushEnabled, emailEnabled}` | Updated preferences |
 
-`type` is one of `ACCOUNT_CONNECTED`, `SYNC_FAILURE`, `REPORT_READY`.
+`NotificationResponse`:
+```json
+{
+  "id": "uuid", "type": "ACCOUNT_CONNECTED", "title": "Account connected",
+  "message": "Your YouTube account was connected successfully.",
+  "data": "{\"accountId\":\"...\"}", "read": false,
+  "createdAt": "2026-07-20T18:30:00", "readAt": null
+}
+```
+`data` is an opaque JSON string (or `null`) the frontend can parse for
+deep-linking (e.g. `{"accountId": "..."}`) — its shape varies by `type`.
+
+`type` is one of `WELCOME`, `ACCOUNT_CONNECTED`, `ANALYSIS_COMPLETED`,
+`SYNC_SUCCESS`, `SYNC_FAILURE`, `REPORT_READY`, `PASSWORD_CHANGED`,
+`NEW_DEVICE_LOGIN`. (`SUBSCRIPTION_SUCCESS`/`SUBSCRIPTION_EXPIRING` also
+exist on the enum for forward compatibility but nothing fires them yet —
+there's no subscription/billing system in this app.)
+
+#### Device registration — push notifications (`/api/devices/*`)
+
+All authenticated. Call `register` once per app launch (safe to call
+every time — it just refreshes the token) and `unregister` on logout.
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| POST | `/api/devices/register` | `{token, platform}` | `DeviceTokenResponse` (201) |
+| DELETE | `/api/devices/unregister` | `{token}` | 204 No Content |
+
+`platform` is `IOS`, `ANDROID`, or `WEB`. `token` is the Expo/Firebase FCM
+device push token obtained from `expo-notifications` (or the native
+Firebase SDK) on the client. If the backend has no Firebase project
+configured (`firebase.enabled=false`), registration still succeeds and is
+stored — it just won't receive any actual pushes yet.
 
 #### Notification Service — Reports (`/api/reports/*`)
 

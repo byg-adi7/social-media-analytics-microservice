@@ -50,12 +50,29 @@ public class Notification {
     @Column(name = "type", nullable = false, length = 30)
     private NotificationType type;
 
+    /** Short heading for display (e.g. push notification title / list-row bold text). */
+    @Column(name = "title", length = 200)
+    private String title;
+
     @Column(name = "message", nullable = false, length = 1000)
     private String message;
+
+    /**
+     * Optional JSON-encoded payload (e.g. {"accountId": "..."}) letting the
+     * frontend deep-link from a notification without a second API call.
+     * Stored as plain text, not a native jsonb column, to avoid a
+     * Postgres-specific Hibernate type dependency for what is, so far, a
+     * small opaque blob the frontend alone interprets.
+     */
+    @Column(name = "data", columnDefinition = "TEXT")
+    private String data;
 
     @Column(name = "is_read", nullable = false)
     private boolean read;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "read_at")
+    private LocalDateTime readAt;
 }

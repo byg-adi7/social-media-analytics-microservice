@@ -119,7 +119,7 @@ class AnalyticsSyncServiceImplTest {
 
         verify(self).syncAccount(account);
         verify(self).syncAccount(other);
-        verify(notificationService).create(eq(account.getUserId()), any(), any());
+        verify(notificationService).notifyUser(eq(account.getUserId()), any(), any(), any(), any());
     }
 
     @Test
@@ -127,12 +127,12 @@ class AnalyticsSyncServiceImplTest {
         when(socialAccountRepository.findAllActiveAccounts()).thenReturn(List.of(account));
         doThrow(new RuntimeException("sync failed")).when(self).syncAccount(account);
         doThrow(new RuntimeException("notification create failed"))
-                .when(notificationService).create(any(), any(), any());
+                .when(notificationService).notifyUser(any(), any(), any(), any(), any());
 
         // Must not throw - a notification-creation failure is best-effort
         // and must never propagate out of the scheduled sync loop.
         analyticsSyncService.syncAllActiveAccounts();
 
-        verify(notificationService).create(eq(account.getUserId()), any(), any());
+        verify(notificationService).notifyUser(eq(account.getUserId()), any(), any(), any(), any());
     }
 }

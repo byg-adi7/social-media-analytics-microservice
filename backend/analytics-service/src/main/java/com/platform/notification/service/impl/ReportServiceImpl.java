@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -95,9 +96,10 @@ public class ReportServiceImpl implements ReportService {
 
         log.info("Generated {} report {} for user {}", request.getReportType(), saved.getId(), userId);
 
-        notificationService.create(userId, NotificationType.REPORT_READY,
+        notificationService.notifyUser(userId, NotificationType.REPORT_READY, "Report ready",
                 "Your " + request.getReportType() + " report for " + request.getStartPeriod()
-                        + " to " + request.getEndPeriod() + " is ready.");
+                        + " to " + request.getEndPeriod() + " is ready.",
+                Map.of("reportId", saved.getId().toString()));
 
         return toResponse(saved);
     }

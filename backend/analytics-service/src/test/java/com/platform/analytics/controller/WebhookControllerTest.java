@@ -2,6 +2,8 @@ package com.platform.analytics.controller;
 
 import com.platform.analytics.config.WebhookProperties;
 import com.platform.analytics.service.UserDataCleanupService;
+import com.platform.notification.constant.NotificationType;
+import com.platform.notification.service.NotificationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -12,10 +14,15 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = WebhookController.class)
@@ -32,6 +39,9 @@ class WebhookControllerTest {
     private UserDataCleanupService userDataCleanupService;
 
     @MockBean
+    private NotificationService notificationService;
+
+    @MockBean
     private WebhookProperties webhookProperties;
 
     // Filters present in the @WebMvcTest slice for WebhookController but
@@ -44,8 +54,55 @@ class WebhookControllerTest {
     private com.platform.analytics.security.RateLimitFilter rateLimitFilter;
 
     @Test
+    void userCreated_validSecret_sendsWelcomeNotification() throws Exception {
+        when(webhookProperties.getSupabaseSecret()).thenReturn(CORRECT_SECRET);
+        UUID userId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/webhooks/user-created")
+                        .header("X-Webhook-Secret", CORRECT_SECRET)
+                        .contentType("application/json")
+                        .content("{\"type\":\"INSERT\",\"table\":\"users\",\"schema\":\"auth\","
+                                + "\"record\":{\"id\":\"" + userId + "\"}}"))
+                .andExpect(status().isNoContent());
+
+        verify(notificationService).notifyUser(eq(userId), eq(NotificationType.WELCOME), any(), any(), isNull());
+    }
+
+    @Test
+    void userUpdated_passwordChanged_sendsPasswordChangedNotification() throws Exception {
+        when(webhookProperties.getSupabaseSecret()).thenReturn(CORRECT_SECRET);
+        UUID userId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/webhooks/user-updated")
+                        .header("X-Webhook-Secret", CORRECT_SECRET)
+                        .contentType("application/json")
+                        .content("{\"type\":\"UPDATE\",\"table\":\"users\",\"schema\":\"auth\","
+                                + "\"record\":{\"id\":\"" + userId + "\",\"encrypted_password\":\"hash-b\"},"
+                                + "\"old_record\":{\"id\":\"" + userId + "\",\"encrypted_password\":\"hash-a\"}}"))
+                .andExpect(status().isNoContent());
+
+        verify(notificationService).notifyUser(eq(userId), eq(NotificationType.PASSWORD_CHANGED), any(), any(), isNull());
+    }
+
+    @Test
+    void userUpdated_unrelatedFieldChanged_doesNotSendPasswordChangedNotification() throws Exception {
+        when(webhookProperties.getSupabaseSecret()).thenReturn(CORRECT_SECRET);
+        UUID userId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/webhooks/user-updated")
+                        .header("X-Webhook-Secret", CORRECT_SECRET)
+                        .contentType("application/json")
+                        .content("{\"type\":\"UPDATE\",\"table\":\"users\",\"schema\":\"auth\","
+                                + "\"record\":{\"id\":\"" + userId + "\",\"encrypted_password\":\"hash-a\"},"
+                                + "\"old_record\":{\"id\":\"" + userId + "\",\"encrypted_password\":\"hash-a\"}}"))
+                .andExpect(status().isNoContent());
+
+        verify(notificationService, never()).notifyUser(any(), eq(NotificationType.PASSWORD_CHANGED), any(), any(), any());
+    }
+
+    @Test
     void userDeleted_validSecret_deletesUserDataAndReturns204() throws Exception {
-        when(webhookProperties.getUserDeletionSecret()).thenReturn(CORRECT_SECRET);
+        when(webhookProperties.getSupabaseSecret()).thenReturn(CORRECT_SECRET);
         UUID userId = UUID.randomUUID();
 
         mockMvc.perform(post("/api/webhooks/user-deleted")
@@ -60,7 +117,7 @@ class WebhookControllerTest {
 
     @Test
     void userDeleted_wrongSecret_returns401_andSkipsCleanup() throws Exception {
-        when(webhookProperties.getUserDeletionSecret()).thenReturn(CORRECT_SECRET);
+        when(webhookProperties.getSupabaseSecret()).thenReturn(CORRECT_SECRET);
 
         mockMvc.perform(post("/api/webhooks/user-deleted")
                         .header("X-Webhook-Secret", "wrong-secret")
@@ -83,15 +140,14 @@ class WebhookControllerTest {
                         .content("{\"type\":\"DELETE\",\"table\":\"users\",\"schema\":\"auth\","
                                 + "\"old_record\":{\"id\":\"" + UUID.randomUUID() + "\"}}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
-                        .jsonPath("$.errorCode").value("BAD_REQUEST"));
+                .andExpect(jsonPath("$.errorCode").value("BAD_REQUEST"));
 
         verifyNoInteractions(userDataCleanupService);
     }
 
     @Test
     void userDeleted_missingOldRecord_returns400() throws Exception {
-        when(webhookProperties.getUserDeletionSecret()).thenReturn(CORRECT_SECRET);
+        when(webhookProperties.getSupabaseSecret()).thenReturn(CORRECT_SECRET);
 
         mockMvc.perform(post("/api/webhooks/user-deleted")
                         .header("X-Webhook-Secret", CORRECT_SECRET)
