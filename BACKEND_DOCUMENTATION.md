@@ -510,10 +510,18 @@ on every push to `main`.
   the jar in one stage, a minimal `eclipse-temurin:21-jre-alpine` runs it
   in the next, as a non-root user, with a container `HEALTHCHECK` against
   `/actuator/health`).
-- **Production**: Render, via the `render.yaml` Blueprint at the repo
-  root — one free Web Service (this Docker image) plus one free managed
-  Postgres database. Secrets marked `sync: false` in that file are never
-  committed; Render prompts for them once when the blueprint is applied.
+- **Production**: deployed on Railway — one service built from
+  `backend/analytics-service/Dockerfile` (Root Directory set to
+  `backend/analytics-service` in Railway's service settings so the build
+  context matches the Dockerfile's `COPY` paths) plus a Railway-managed
+  Postgres database, linked via Railway's `${{Postgres.PGHOST}}`-style
+  variable references. `backend/analytics-service/railway.json` pins the
+  builder and health-check path (`/actuator/health`). Railway's port
+  routing needs an explicit `PORT` variable set to `8002` (matching the
+  Dockerfile's fixed `SERVER_PORT`), since this app doesn't dynamically
+  read Railway's own injected `PORT` value.
+  A `render.yaml` Blueprint also exists at the repo root as an
+  alternative path to Render, kept in sync with the same env var set.
 
 ---
 
