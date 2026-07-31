@@ -67,6 +67,10 @@ spring:
 # Supabase; this service only checks that a token is genuine.
 supabase:
   jwt-secret: ${SUPABASE_JWT_SECRET:dev-only-placeholder-set-real-supabase-jwt-secret-in-env}
+  # Used to fetch the JWKS public keys (auth/v1/.well-known/jwks.json) for
+  # verifying asymmetric (ES256) tokens - the same URL as the frontend's
+  # EXPO_PUBLIC_SUPABASE_URL, no trailing slash.
+  url: ${SUPABASE_URL:https://dev-only-placeholder.supabase.co}
 
 # CORS allow-list for the frontend origin(s). Comma-separated for multiple
 # environments/domains, e.g. "https://app.example.com,https://staging.example.com".
