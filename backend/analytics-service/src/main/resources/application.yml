@@ -71,6 +71,11 @@ supabase:
   # verifying asymmetric (ES256) tokens - the same URL as the frontend's
   # EXPO_PUBLIC_SUPABASE_URL, no trailing slash.
   url: ${SUPABASE_URL:https://dev-only-placeholder.supabase.co}
+  # Secret, server-only - never expose this to the frontend. Required to
+  # call Supabase's Admin API (auth/v1/admin/users/{id}) for self-service
+  # account deletion; find it in Supabase Dashboard > Project Settings >
+  # API > service_role key.
+  service-role-key: ${SUPABASE_SERVICE_ROLE_KEY:}
 
 # CORS allow-list for the frontend origin(s). Comma-separated for multiple
 # environments/domains, e.g. "https://app.example.com,https://staging.example.com".
