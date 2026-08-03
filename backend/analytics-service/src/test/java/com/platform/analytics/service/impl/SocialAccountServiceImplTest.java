@@ -9,6 +9,7 @@ import com.platform.analytics.dto.response.SocialAccountResponse;
 import com.platform.analytics.entity.Analytics;
 import com.platform.analytics.entity.SocialAccount;
 import com.platform.analytics.exception.BadRequestException;
+import com.platform.analytics.exception.ConflictException;
 import com.platform.analytics.exception.ResourceNotFoundException;
 import com.platform.analytics.mapper.SocialAccountMapper;
 import com.platform.analytics.repository.AnalyticsRepository;
@@ -91,8 +92,8 @@ class SocialAccountServiceImplTest {
                 .accessToken("token")
                 .build();
 
-        when(socialAccountRepository.existsByPlatformAndAccountId(Platform.YOUTUBE, "yt-123"))
-                .thenReturn(false);
+        when(socialAccountRepository.findByPlatformAndAccountId(Platform.YOUTUBE, "yt-123"))
+                .thenReturn(Optional.empty());
         when(socialAccountRepository.save(any(SocialAccount.class))).thenReturn(account);
         when(socialAccountMapper.toResponse(account)).thenReturn(SocialAccountResponse.builder().id(accountId).build());
 
@@ -113,8 +114,8 @@ class SocialAccountServiceImplTest {
                 .accessToken("token")
                 .build();
 
-        when(socialAccountRepository.existsByPlatformAndAccountId(Platform.YOUTUBE, "yt-123"))
-                .thenReturn(false);
+        when(socialAccountRepository.findByPlatformAndAccountId(Platform.YOUTUBE, "yt-123"))
+                .thenReturn(Optional.empty());
         when(socialAccountRepository.save(any(SocialAccount.class))).thenReturn(account);
         when(socialAccountMapper.toResponse(account)).thenReturn(SocialAccountResponse.builder().id(accountId).build());
         doThrow(new RuntimeException("notification create failed"))
@@ -127,7 +128,7 @@ class SocialAccountServiceImplTest {
     }
 
     @Test
-    void connectAccount_throwsBadRequest_whenAlreadyConnected() {
+    void connectAccount_throwsConflict_whenAlreadyConnected() {
         ConnectAccountRequest request = ConnectAccountRequest.builder()
                 .platform(Platform.YOUTUBE)
                 .accountId("yt-123")
@@ -135,14 +136,40 @@ class SocialAccountServiceImplTest {
                 .accessToken("token")
                 .build();
 
-        when(socialAccountRepository.existsByPlatformAndAccountId(Platform.YOUTUBE, "yt-123"))
-                .thenReturn(true);
+        when(socialAccountRepository.findByPlatformAndAccountId(Platform.YOUTUBE, "yt-123"))
+                .thenReturn(Optional.of(account));
 
         assertThatThrownBy(() -> socialAccountService.connectAccount(userId, request))
-                .isInstanceOf(BadRequestException.class)
+                .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("already connected");
 
         verify(socialAccountRepository, never()).save(any());
+    }
+
+    @Test
+    void connectAccount_reactivatesInactiveSameUserAccount() {
+        account.setActive(false);
+        ConnectAccountRequest request = ConnectAccountRequest.builder()
+                .platform(Platform.YOUTUBE)
+                .accountId("yt-123")
+                .accountName("Recovered Channel")
+                .accessToken("new-token")
+                .build();
+
+        when(socialAccountRepository.findByPlatformAndAccountId(Platform.YOUTUBE, "yt-123"))
+                .thenReturn(Optional.of(account));
+        when(socialAccountRepository.save(account)).thenReturn(account);
+        when(socialAccountMapper.toResponse(account)).thenReturn(SocialAccountResponse.builder().id(accountId).build());
+
+        SocialAccountResponse response = socialAccountService.connectAccount(userId, request);
+
+        assertThat(response.getId()).isEqualTo(accountId);
+        assertThat(account.isActive()).isTrue();
+        assertThat(account.getAccountName()).isEqualTo("Recovered Channel");
+        assertThat(account.getAccessToken()).isEqualTo("new-token");
+        verify(analyticsRepository).deleteBySocialAccountId(accountId);
+        verify(analyticsSyncService).syncAccount(account);
+        verify(notificationService).notifyUser(eq(userId), any(), any(), any(), any());
     }
 
     @Test

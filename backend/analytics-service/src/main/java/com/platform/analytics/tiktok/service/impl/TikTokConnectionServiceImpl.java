@@ -1,11 +1,14 @@
 package com.platform.analytics.tiktok.service.impl;
 
+import com.platform.analytics.constant.AccountConnectionType;
 import com.platform.analytics.constant.Platform;
 import com.platform.analytics.dto.response.SocialAccountResponse;
 import com.platform.analytics.entity.SocialAccount;
 import com.platform.analytics.exception.BadRequestException;
+import com.platform.analytics.exception.ConflictException;
 import com.platform.analytics.exception.ExternalApiException;
 import com.platform.analytics.mapper.SocialAccountMapper;
+import com.platform.analytics.repository.AnalyticsRepository;
 import com.platform.analytics.repository.SocialAccountRepository;
 import com.platform.analytics.security.StateTokenService;
 import com.platform.analytics.service.AnalyticsSyncService;
@@ -22,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -36,6 +40,7 @@ public class TikTokConnectionServiceImpl implements TikTokConnectionService {
     private final TikTokApiClient tikTokApiClient;
     private final StateTokenService stateTokenService;
     private final SocialAccountRepository socialAccountRepository;
+    private final AnalyticsRepository analyticsRepository;
     private final SocialAccountMapper socialAccountMapper;
     private final AnalyticsSyncService analyticsSyncService;
     private final TikTokProperties tikTokProperties;
@@ -65,14 +70,7 @@ public class TikTokConnectionServiceImpl implements TikTokConnectionService {
         String accountName = profile.displayName() != null ? profile.displayName()
                 : (profile.username() != null ? profile.username() : "TikTok Account");
 
-        SocialAccount account = socialAccountRepository
-                .findByUserIdAndPlatformAndAccountId(userId, Platform.TIKTOK, openId)
-                .orElseGet(() -> SocialAccount.builder()
-                        .userId(userId)
-                        .platform(Platform.TIKTOK)
-                        .accountId(openId)
-                        .connectedAt(LocalDateTime.now())
-                        .build());
+        SocialAccount account = resolveAccountForConnection(userId, openId);
 
         account.setAccountName(accountName);
         account.setUsername(profile.username());
@@ -86,6 +84,7 @@ public class TikTokConnectionServiceImpl implements TikTokConnectionService {
         if (tokens.expiresInSeconds() != null) {
             account.setTokenExpiresAt(LocalDateTime.now().plusSeconds(tokens.expiresInSeconds()));
         }
+        account.setConnectionType(AccountConnectionType.OAUTH);
         account.setActive(true);
 
         SocialAccount saved = socialAccountRepository.save(account);
@@ -94,6 +93,43 @@ public class TikTokConnectionServiceImpl implements TikTokConnectionService {
         analyticsSyncService.syncAccount(saved);
 
         return socialAccountMapper.toResponse(saved);
+    }
+
+    private SocialAccount resolveAccountForConnection(UUID userId, String openId) {
+        Optional<SocialAccount> existing =
+                socialAccountRepository.findByPlatformAndAccountId(Platform.TIKTOK, openId);
+
+        if (existing.isEmpty()) {
+            return SocialAccount.builder()
+                    .userId(userId)
+                    .platform(Platform.TIKTOK)
+                    .accountId(openId)
+                    .connectedAt(LocalDateTime.now())
+                    .build();
+        }
+
+        SocialAccount existingAccount = existing.get();
+        if (existingAccount.getUserId().equals(userId)) {
+            if (!existingAccount.isActive()) {
+                analyticsRepository.deleteBySocialAccountId(existingAccount.getId());
+                existingAccount.setConnectedAt(LocalDateTime.now());
+            }
+            return existingAccount;
+        }
+
+        if (!existingAccount.isActive()) {
+            analyticsRepository.deleteBySocialAccountId(existingAccount.getId());
+            socialAccountRepository.delete(existingAccount);
+            socialAccountRepository.flush();
+            return SocialAccount.builder()
+                    .userId(userId)
+                    .platform(Platform.TIKTOK)
+                    .accountId(openId)
+                    .connectedAt(LocalDateTime.now())
+                    .build();
+        }
+
+        throw new ConflictException("This TikTok account is already connected to another user");
     }
 
     private TikTokUserInfoResponse.User fetchProfile(String accessToken) {

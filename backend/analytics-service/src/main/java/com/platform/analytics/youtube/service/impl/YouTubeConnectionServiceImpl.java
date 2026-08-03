@@ -1,11 +1,14 @@
 package com.platform.analytics.youtube.service.impl;
 
 import com.platform.analytics.constant.Platform;
+import com.platform.analytics.constant.AccountConnectionType;
 import com.platform.analytics.dto.response.SocialAccountResponse;
 import com.platform.analytics.entity.SocialAccount;
 import com.platform.analytics.exception.BadRequestException;
+import com.platform.analytics.exception.ConflictException;
 import com.platform.analytics.exception.ExternalApiException;
 import com.platform.analytics.mapper.SocialAccountMapper;
+import com.platform.analytics.repository.AnalyticsRepository;
 import com.platform.analytics.repository.SocialAccountRepository;
 import com.platform.analytics.security.StateTokenService;
 import com.platform.analytics.service.AnalyticsSyncService;
@@ -39,6 +42,7 @@ public class YouTubeConnectionServiceImpl implements YouTubeConnectionService {
     private final YouTubeDataApiClient youTubeDataApiClient;
     private final StateTokenService stateTokenService;
     private final SocialAccountRepository socialAccountRepository;
+    private final AnalyticsRepository analyticsRepository;
     private final SocialAccountMapper socialAccountMapper;
     private final AnalyticsSyncService analyticsSyncService;
     private final YouTubeProperties youTubeProperties;
@@ -69,15 +73,46 @@ public class YouTubeConnectionServiceImpl implements YouTubeConnectionService {
                 : null;
 
         Optional<SocialAccount> existing =
-                socialAccountRepository.findByUserIdAndPlatformAndAccountId(userId, Platform.YOUTUBE, channelId);
-        boolean isNewConnection = existing.isEmpty();
+                socialAccountRepository.findByPlatformAndAccountId(Platform.YOUTUBE, channelId);
 
-        SocialAccount account = existing.orElseGet(() -> SocialAccount.builder()
-                .userId(userId)
-                .platform(Platform.YOUTUBE)
-                .accountId(channelId)
-                .connectedAt(LocalDateTime.now())
-                .build());
+        SocialAccount account;
+        boolean shouldNotifyAccountConnected;
+        if (existing.isPresent()) {
+            SocialAccount existingAccount = existing.get();
+            if (existingAccount.getUserId().equals(userId)) {
+                account = existingAccount;
+                shouldNotifyAccountConnected = !existingAccount.isActive();
+                if (!existingAccount.isActive()) {
+                    analyticsRepository.deleteBySocialAccountId(existingAccount.getId());
+                    account.setConnectedAt(LocalDateTime.now());
+                }
+            } else if (!existingAccount.isActive()) {
+                // Historical/failed disconnects can leave an inactive row
+                // behind. Remove it before inserting for the current user so
+                // reconnecting the same YouTube channel does not trip
+                // uk_platform_account_id.
+                analyticsRepository.deleteBySocialAccountId(existingAccount.getId());
+                socialAccountRepository.delete(existingAccount);
+                socialAccountRepository.flush();
+                account = SocialAccount.builder()
+                        .userId(userId)
+                        .platform(Platform.YOUTUBE)
+                        .accountId(channelId)
+                        .connectedAt(LocalDateTime.now())
+                        .build();
+                shouldNotifyAccountConnected = true;
+            } else {
+                throw new ConflictException("This YouTube account is already connected to another user");
+            }
+        } else {
+            account = SocialAccount.builder()
+                    .userId(userId)
+                    .platform(Platform.YOUTUBE)
+                    .accountId(channelId)
+                    .connectedAt(LocalDateTime.now())
+                    .build();
+            shouldNotifyAccountConnected = true;
+        }
 
         account.setAccountName(channelTitle);
         account.setUsername(channelTitle);
@@ -94,6 +129,7 @@ public class YouTubeConnectionServiceImpl implements YouTubeConnectionService {
         if (tokens.expiresInSeconds() != null) {
             account.setTokenExpiresAt(LocalDateTime.now().plusSeconds(tokens.expiresInSeconds()));
         }
+        account.setConnectionType(AccountConnectionType.OAUTH);
         account.setActive(true);
 
         SocialAccount saved = socialAccountRepository.save(account);
@@ -101,7 +137,7 @@ public class YouTubeConnectionServiceImpl implements YouTubeConnectionService {
 
         analyticsSyncService.syncAccount(saved);
 
-        if (isNewConnection) {
+        if (shouldNotifyAccountConnected) {
             notifyAccountConnected(saved);
         }
 

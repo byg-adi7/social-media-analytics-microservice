@@ -1,9 +1,11 @@
 package com.platform.analytics.facebook.service.impl;
 
+import com.platform.analytics.constant.AccountConnectionType;
 import com.platform.analytics.constant.Platform;
 import com.platform.analytics.dto.response.SocialAccountResponse;
 import com.platform.analytics.entity.SocialAccount;
 import com.platform.analytics.exception.BadRequestException;
+import com.platform.analytics.exception.ConflictException;
 import com.platform.analytics.exception.ExternalApiException;
 import com.platform.analytics.facebook.FacebookProperties;
 import com.platform.analytics.facebook.api.FacebookApiClient;
@@ -13,6 +15,7 @@ import com.platform.analytics.facebook.api.dto.FacebookTokenResponse;
 import com.platform.analytics.facebook.service.FacebookConnectionService;
 import com.platform.analytics.facebook.service.FacebookOAuthService;
 import com.platform.analytics.mapper.SocialAccountMapper;
+import com.platform.analytics.repository.AnalyticsRepository;
 import com.platform.analytics.repository.SocialAccountRepository;
 import com.platform.analytics.security.StateTokenService;
 import com.platform.analytics.service.AnalyticsSyncService;
@@ -23,6 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -36,6 +40,7 @@ public class FacebookConnectionServiceImpl implements FacebookConnectionService 
     private final FacebookApiClient facebookApiClient;
     private final StateTokenService stateTokenService;
     private final SocialAccountRepository socialAccountRepository;
+    private final AnalyticsRepository analyticsRepository;
     private final SocialAccountMapper socialAccountMapper;
     private final AnalyticsSyncService analyticsSyncService;
     private final FacebookProperties facebookProperties;
@@ -64,14 +69,7 @@ public class FacebookConnectionServiceImpl implements FacebookConnectionService 
                 ? pageDetails.picture().data().url()
                 : null;
 
-        SocialAccount account = socialAccountRepository
-                .findByUserIdAndPlatformAndAccountId(userId, Platform.FACEBOOK, page.id())
-                .orElseGet(() -> SocialAccount.builder()
-                        .userId(userId)
-                        .platform(Platform.FACEBOOK)
-                        .accountId(page.id())
-                        .connectedAt(LocalDateTime.now())
-                        .build());
+        SocialAccount account = resolveAccountForConnection(userId, page.id());
 
         account.setAccountName(pageDetails.name() != null ? pageDetails.name() : page.name());
         account.setProfileImage(profileImage);
@@ -83,6 +81,7 @@ public class FacebookConnectionServiceImpl implements FacebookConnectionService 
         // FacebookSocialMediaClient for what happens if it's ever revoked.
         account.setRefreshToken(null);
         account.setTokenExpiresAt(null);
+        account.setConnectionType(AccountConnectionType.OAUTH);
         account.setActive(true);
 
         SocialAccount saved = socialAccountRepository.save(account);
@@ -91,6 +90,43 @@ public class FacebookConnectionServiceImpl implements FacebookConnectionService 
         analyticsSyncService.syncAccount(saved);
 
         return socialAccountMapper.toResponse(saved);
+    }
+
+    private SocialAccount resolveAccountForConnection(UUID userId, String pageId) {
+        Optional<SocialAccount> existing =
+                socialAccountRepository.findByPlatformAndAccountId(Platform.FACEBOOK, pageId);
+
+        if (existing.isEmpty()) {
+            return SocialAccount.builder()
+                    .userId(userId)
+                    .platform(Platform.FACEBOOK)
+                    .accountId(pageId)
+                    .connectedAt(LocalDateTime.now())
+                    .build();
+        }
+
+        SocialAccount existingAccount = existing.get();
+        if (existingAccount.getUserId().equals(userId)) {
+            if (!existingAccount.isActive()) {
+                analyticsRepository.deleteBySocialAccountId(existingAccount.getId());
+                existingAccount.setConnectedAt(LocalDateTime.now());
+            }
+            return existingAccount;
+        }
+
+        if (!existingAccount.isActive()) {
+            analyticsRepository.deleteBySocialAccountId(existingAccount.getId());
+            socialAccountRepository.delete(existingAccount);
+            socialAccountRepository.flush();
+            return SocialAccount.builder()
+                    .userId(userId)
+                    .platform(Platform.FACEBOOK)
+                    .accountId(pageId)
+                    .connectedAt(LocalDateTime.now())
+                    .build();
+        }
+
+        throw new ConflictException("This Facebook Page is already connected to another user");
     }
 
     private FacebookAccountsResponse.Page fetchFirstManagedPage(String longLivedUserToken) {

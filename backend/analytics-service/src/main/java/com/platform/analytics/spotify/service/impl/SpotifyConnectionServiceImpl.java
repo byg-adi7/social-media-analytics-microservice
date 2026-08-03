@@ -1,11 +1,14 @@
 package com.platform.analytics.spotify.service.impl;
 
+import com.platform.analytics.constant.AccountConnectionType;
 import com.platform.analytics.constant.Platform;
 import com.platform.analytics.dto.response.SocialAccountResponse;
 import com.platform.analytics.entity.SocialAccount;
 import com.platform.analytics.exception.BadRequestException;
+import com.platform.analytics.exception.ConflictException;
 import com.platform.analytics.exception.ExternalApiException;
 import com.platform.analytics.mapper.SocialAccountMapper;
+import com.platform.analytics.repository.AnalyticsRepository;
 import com.platform.analytics.repository.SocialAccountRepository;
 import com.platform.analytics.security.StateTokenService;
 import com.platform.analytics.service.AnalyticsSyncService;
@@ -22,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -33,6 +37,7 @@ public class SpotifyConnectionServiceImpl implements SpotifyConnectionService {
     private final SpotifyApiClient spotifyApiClient;
     private final StateTokenService stateTokenService;
     private final SocialAccountRepository socialAccountRepository;
+    private final AnalyticsRepository analyticsRepository;
     private final SocialAccountMapper socialAccountMapper;
     private final AnalyticsSyncService analyticsSyncService;
     private final SpotifyProperties spotifyProperties;
@@ -70,14 +75,7 @@ public class SpotifyConnectionServiceImpl implements SpotifyConnectionService {
                 ? profile.images().get(0).url()
                 : null;
 
-        SocialAccount account = socialAccountRepository
-                .findByUserIdAndPlatformAndAccountId(userId, Platform.SPOTIFY, accountId)
-                .orElseGet(() -> SocialAccount.builder()
-                        .userId(userId)
-                        .platform(Platform.SPOTIFY)
-                        .accountId(accountId)
-                        .connectedAt(LocalDateTime.now())
-                        .build());
+        SocialAccount account = resolveAccountForConnection(userId, accountId);
 
         account.setAccountName(displayName);
         account.setUsername(displayName);
@@ -93,6 +91,7 @@ public class SpotifyConnectionServiceImpl implements SpotifyConnectionService {
         if (tokens.expiresInSeconds() != null) {
             account.setTokenExpiresAt(LocalDateTime.now().plusSeconds(tokens.expiresInSeconds()));
         }
+        account.setConnectionType(AccountConnectionType.OAUTH);
         account.setActive(true);
 
         SocialAccount saved = socialAccountRepository.save(account);
@@ -102,6 +101,43 @@ public class SpotifyConnectionServiceImpl implements SpotifyConnectionService {
         analyticsSyncService.syncAccount(saved);
 
         return socialAccountMapper.toResponse(saved);
+    }
+
+    private SocialAccount resolveAccountForConnection(UUID userId, String accountId) {
+        Optional<SocialAccount> existing =
+                socialAccountRepository.findByPlatformAndAccountId(Platform.SPOTIFY, accountId);
+
+        if (existing.isEmpty()) {
+            return SocialAccount.builder()
+                    .userId(userId)
+                    .platform(Platform.SPOTIFY)
+                    .accountId(accountId)
+                    .connectedAt(LocalDateTime.now())
+                    .build();
+        }
+
+        SocialAccount existingAccount = existing.get();
+        if (existingAccount.getUserId().equals(userId)) {
+            if (!existingAccount.isActive()) {
+                analyticsRepository.deleteBySocialAccountId(existingAccount.getId());
+                existingAccount.setConnectedAt(LocalDateTime.now());
+            }
+            return existingAccount;
+        }
+
+        if (!existingAccount.isActive()) {
+            analyticsRepository.deleteBySocialAccountId(existingAccount.getId());
+            socialAccountRepository.delete(existingAccount);
+            socialAccountRepository.flush();
+            return SocialAccount.builder()
+                    .userId(userId)
+                    .platform(Platform.SPOTIFY)
+                    .accountId(accountId)
+                    .connectedAt(LocalDateTime.now())
+                    .build();
+        }
+
+        throw new ConflictException("This Spotify account is already connected to another user");
     }
 
     private SpotifyUserProfileResponse fetchProfile(String accessToken) {

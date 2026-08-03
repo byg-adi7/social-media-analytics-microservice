@@ -10,6 +10,7 @@ import com.platform.analytics.dto.response.SocialAccountResponse;
 import com.platform.analytics.entity.Analytics;
 import com.platform.analytics.entity.SocialAccount;
 import com.platform.analytics.exception.BadRequestException;
+import com.platform.analytics.exception.ConflictException;
 import com.platform.analytics.exception.ResourceNotFoundException;
 import com.platform.analytics.mapper.SocialAccountMapper;
 import com.platform.analytics.repository.AnalyticsRepository;
@@ -51,39 +52,58 @@ public class SocialAccountServiceImpl implements SocialAccountService {
     public SocialAccountResponse connectAccount(UUID userId, ConnectAccountRequest request) {
         platformValidator.validate(request.getPlatform());
 
-        // Matches uk_platform_account_id's actual scope (platform +
-        // account_id, not per-user) - a per-user-scoped check here would
-        // miss the case where a *different* user already connected this
-        // same external account, and the insert below would fail with a
-        // raw unique-constraint violation instead of this clean error.
-        boolean alreadyConnected = socialAccountRepository.existsByPlatformAndAccountId(
-                request.getPlatform(), request.getAccountId());
+        Optional<SocialAccount> existingAccount =
+                socialAccountRepository.findByPlatformAndAccountId(request.getPlatform(), request.getAccountId());
 
-        if (alreadyConnected) {
-            throw new BadRequestException(
-                    "This " + request.getPlatform().getDisplayName() + " account is already connected");
+        SocialAccount account;
+        boolean shouldNotifyAccountConnected;
+        if (existingAccount.isPresent()) {
+            account = existingAccount.get();
+            if (!account.getUserId().equals(userId)) {
+                throw new ConflictException(
+                        "This " + request.getPlatform().getDisplayName() + " account is already connected to another user");
+            }
+            if (account.isActive()) {
+                throw new ConflictException(
+                        "This " + request.getPlatform().getDisplayName() + " account is already connected");
+            }
+
+            // Recover from stale/soft-disconnected rows without violating the
+            // global (platform, account_id) unique constraint. Analytics is
+            // reset to match the normal disconnect semantics before the
+            // initial sync repopulates current data.
+            analyticsRepository.deleteBySocialAccountId(account.getId());
+            account.setConnectedAt(LocalDateTime.now());
+            account.setConnectionType(AccountConnectionType.OAUTH);
+            shouldNotifyAccountConnected = true;
+        } else {
+            account = SocialAccount.builder()
+                    .userId(userId)
+                    .platform(request.getPlatform())
+                    .accountId(request.getAccountId())
+                    .connectedAt(LocalDateTime.now())
+                    .connectionType(AccountConnectionType.OAUTH)
+                    .build();
+            shouldNotifyAccountConnected = true;
         }
 
-        SocialAccount account = SocialAccount.builder()
-                .userId(userId)
-                .platform(request.getPlatform())
-                .accountId(request.getAccountId())
-                .accountName(request.getAccountName())
-                .username(request.getUsername())
-                .profileImage(request.getProfileImage())
-                .accessToken(request.getAccessToken())
-                .refreshToken(request.getRefreshToken())
-                .connectedAt(LocalDateTime.now())
-                .active(true)
-                .build();
+        account.setAccountName(request.getAccountName());
+        account.setUsername(request.getUsername());
+        account.setProfileImage(request.getProfileImage());
+        account.setAccessToken(request.getAccessToken());
+        account.setRefreshToken(request.getRefreshToken());
+        account.setTokenExpiresAt(null);
+        account.setActive(true);
 
         SocialAccount saved = socialAccountRepository.save(account);
-        log.info("Connected new {} account {} for user {}", saved.getPlatform(), saved.getId(), userId);
+        log.info("Connected/updated {} account {} for user {}", saved.getPlatform(), saved.getId(), userId);
 
         // Perform an initial sync so the dashboard has data immediately.
         analyticsSyncService.syncAccount(saved);
 
-        notifyAccountConnected(saved);
+        if (shouldNotifyAccountConnected) {
+            notifyAccountConnected(saved);
+        }
 
         return socialAccountMapper.toResponse(saved);
     }
