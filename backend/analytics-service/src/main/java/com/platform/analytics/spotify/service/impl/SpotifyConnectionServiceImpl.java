@@ -181,7 +181,11 @@ public class SpotifyConnectionServiceImpl implements SpotifyConnectionService {
         try {
             return spotifyApiClient.getCurrentUserProfile("Bearer " + accessToken);
         } catch (FeignException ex) {
-            log.error("Failed to fetch profile during Spotify connect: {}", ex.getMessage());
+            // Spotify's own error body (e.g. "User not registered in the
+            // Developer Dashboard" for an app still in Development Mode)
+            // is the one piece of information that actually explains this
+            // failure - ex.getMessage() alone doesn't reliably include it.
+            log.error("Failed to fetch profile during Spotify connect: HTTP {} - {}", ex.status(), ex.contentUTF8());
             throw new ExternalApiException("Failed to fetch Spotify profile", ex);
         }
     }

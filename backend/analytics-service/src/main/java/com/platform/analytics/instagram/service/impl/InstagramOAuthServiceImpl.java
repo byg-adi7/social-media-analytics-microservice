@@ -96,7 +96,19 @@ public class InstagramOAuthServiceImpl implements InstagramOAuthService {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                return objectMapper.readValue(response.body(), InstagramShortLivedTokenResponse.class);
+                InstagramShortLivedTokenResponse parsed =
+                        objectMapper.readValue(response.body(), InstagramShortLivedTokenResponse.class);
+                // A 2xx status with no `data` entries has been silent until
+                // now - the caller only sees a generic "no access token"
+                // message with nothing to diagnose it by. Logging Instagram's
+                // actual raw body here (most likely an error object under a
+                // different shape than expected, e.g. {"error_type":...}) is
+                // the only way to tell why without live debugger access.
+                if (parsed.data() == null || parsed.data().isEmpty()) {
+                    log.error("Instagram short-lived token endpoint returned HTTP {} but no usable token: {}",
+                            response.statusCode(), response.body());
+                }
+                return parsed;
             }
 
             log.error("Instagram short-lived token endpoint returned {}: {}",
