@@ -91,6 +91,15 @@ public class AnalyticsQueryServiceImpl implements AnalyticsQueryService {
         List<Long> views = sortedDates.stream()
                 .map(d -> byDate.get(d).stream().mapToLong(Analytics::getViews).sum())
                 .toList();
+        List<Long> likes = sortedDates.stream()
+                .map(d -> byDate.get(d).stream().mapToLong(Analytics::getLikes).sum())
+                .toList();
+        List<Long> comments = sortedDates.stream()
+                .map(d -> byDate.get(d).stream().mapToLong(Analytics::getComments).sum())
+                .toList();
+        List<Long> shares = sortedDates.stream()
+                .map(d -> byDate.get(d).stream().mapToLong(Analytics::getShares).sum())
+                .toList();
         List<Double> engagementRate = sortedDates.stream()
                 .map(d -> AnalyticsCalculator.round2(
                         byDate.get(d).stream().mapToDouble(Analytics::getEngagementRate).average().orElse(0.0)))
@@ -106,6 +115,9 @@ public class AnalyticsQueryServiceImpl implements AnalyticsQueryService {
                 .labels(labels)
                 .followers(followers)
                 .views(views)
+                .likes(likes)
+                .comments(comments)
+                .shares(shares)
                 .engagementRate(engagementRate)
                 .movingAverage(movingAvg)
                 .percentageChange(percentageChange)

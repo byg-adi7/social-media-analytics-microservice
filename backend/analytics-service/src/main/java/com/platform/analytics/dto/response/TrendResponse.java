@@ -22,6 +22,9 @@ public class TrendResponse {
     private List<String> labels;
     private List<Long> followers;
     private List<Long> views;
+    private List<Long> likes;
+    private List<Long> comments;
+    private List<Long> shares;
     private List<Double> engagementRate;
     private List<Double> movingAverage;
     private double percentageChange;
