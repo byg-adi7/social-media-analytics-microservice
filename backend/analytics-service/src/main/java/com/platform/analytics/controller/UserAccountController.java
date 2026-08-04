@@ -2,6 +2,8 @@ package com.platform.analytics.controller;
 
 import com.platform.analytics.security.SecurityContextUtil;
 import com.platform.analytics.service.SupabaseAdminService;
+import com.platform.notification.constant.NotificationType;
+import com.platform.notification.service.NotificationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ import java.util.UUID;
 public class UserAccountController {
 
     private final SupabaseAdminService supabaseAdminService;
+    private final NotificationService notificationService;
 
     @DeleteMapping("/me")
     @Operation(summary = "Permanently delete the authenticated user's account",
@@ -36,6 +39,18 @@ public class UserAccountController {
     public ResponseEntity<Void> deleteMyAccount() {
         UUID userId = SecurityContextUtil.getCurrentUserId();
         log.info("Incoming request: delete own account, user={}", userId);
+
+        // Sent before deleteUser(), not after: the user-deleted webhook that
+        // follows cascade-deletes this user's device tokens, so anything
+        // sent afterward would have no token left to push to. Best-effort -
+        // a notification failure here must not block the actual deletion.
+        try {
+            notificationService.notifyUser(userId, NotificationType.ACCOUNT_DELETED, "Account deleted",
+                    "Your Audience Insights account and all associated data have been permanently deleted.", null);
+        } catch (Exception ex) {
+            log.warn("Failed to send account-deleted notification for user {}: {}", userId, ex.getMessage());
+        }
+
         supabaseAdminService.deleteUser(userId);
         return ResponseEntity.noContent().build();
     }

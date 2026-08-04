@@ -174,6 +174,27 @@ public class SocialAccountServiceImpl implements SocialAccountService {
         analyticsRepository.deleteBySocialAccountId(accountId);
         socialAccountRepository.delete(account);
         log.info("Disconnected account {} for user {}", accountId, userId);
+
+        notifyAccountDisconnected(account);
+    }
+
+    /**
+     * Best-effort, same reasoning as notifyAccountConnected: a failure
+     * creating the notification must never fail an otherwise-successful
+     * disconnect.
+     */
+    private void notifyAccountDisconnected(SocialAccount account) {
+        try {
+            notificationService.notifyUser(
+                    account.getUserId(),
+                    NotificationType.ACCOUNT_DISCONNECTED,
+                    "Account disconnected",
+                    "Your " + account.getPlatform().getDisplayName() + " account was disconnected.",
+                    Map.of("platform", account.getPlatform().name()));
+        } catch (Exception ex) {
+            log.warn("Failed to send account-disconnected notification for account {}: {}",
+                    account.getId(), ex.getMessage());
+        }
     }
 
     @Override

@@ -24,6 +24,10 @@ public enum NotificationType {
     PASSWORD_CHANGED,
     /** Fired when a device token is registered that the user hasn't registered before. */
     NEW_DEVICE_LOGIN,
+    /** Fired when a connected social account is disconnected. */
+    ACCOUNT_DISCONNECTED,
+    /** Fired right before the underlying Supabase user is deleted - sent first because the cascade-delete that follows removes this user's device tokens too, so anything sent after would have nowhere to go. */
+    ACCOUNT_DELETED,
     /** Not currently fired by any code path - no subscription/billing system exists in this app yet. */
     SUBSCRIPTION_SUCCESS,
     /** Not currently fired by any code path - no subscription/billing system exists in this app yet. */

@@ -16,6 +16,7 @@ import com.platform.analytics.repository.AnalyticsRepository;
 import com.platform.analytics.repository.SocialAccountRepository;
 import com.platform.analytics.service.AnalyticsSyncService;
 import com.platform.analytics.validator.PlatformValidator;
+import com.platform.notification.constant.NotificationType;
 import com.platform.notification.service.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -208,6 +209,28 @@ class SocialAccountServiceImplTest {
         // regression this test guards against: disconnect used to throw
         // a foreign key violation for any account with generated analytics.
         verify(analyticsRepository).deleteBySocialAccountId(accountId);
+        verify(socialAccountRepository).delete(account);
+    }
+
+    @Test
+    void disconnectAccount_sendsAccountDisconnectedNotification() {
+        when(socialAccountRepository.findByIdAndUserId(accountId, userId)).thenReturn(Optional.of(account));
+
+        socialAccountService.disconnectAccount(userId, accountId);
+
+        verify(notificationService).notifyUser(
+                eq(userId), eq(NotificationType.ACCOUNT_DISCONNECTED), any(), any(), any());
+    }
+
+    @Test
+    void disconnectAccount_notificationFails_stillDisconnectsSuccessfully() {
+        when(socialAccountRepository.findByIdAndUserId(accountId, userId)).thenReturn(Optional.of(account));
+        doThrow(new RuntimeException("notification create failed"))
+                .when(notificationService).notifyUser(any(), any(), any(), any(), any());
+
+        // A notification-creation failure must not fail an otherwise-successful disconnect.
+        socialAccountService.disconnectAccount(userId, accountId);
+
         verify(socialAccountRepository).delete(account);
     }
 
