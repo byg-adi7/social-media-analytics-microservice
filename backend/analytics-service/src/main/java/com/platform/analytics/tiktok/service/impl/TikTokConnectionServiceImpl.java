@@ -1,11 +1,14 @@
 package com.platform.analytics.tiktok.service.impl;
 
+import com.platform.analytics.constant.AccountConnectionType;
 import com.platform.analytics.constant.Platform;
 import com.platform.analytics.dto.response.SocialAccountResponse;
 import com.platform.analytics.entity.SocialAccount;
 import com.platform.analytics.exception.BadRequestException;
+import com.platform.analytics.exception.ConflictException;
 import com.platform.analytics.exception.ExternalApiException;
 import com.platform.analytics.mapper.SocialAccountMapper;
+import com.platform.analytics.repository.AnalyticsRepository;
 import com.platform.analytics.repository.SocialAccountRepository;
 import com.platform.analytics.security.StateTokenService;
 import com.platform.analytics.service.AnalyticsSyncService;
@@ -40,6 +43,7 @@ public class TikTokConnectionServiceImpl implements TikTokConnectionService {
     private final TikTokApiClient tikTokApiClient;
     private final StateTokenService stateTokenService;
     private final SocialAccountRepository socialAccountRepository;
+    private final AnalyticsRepository analyticsRepository;
     private final SocialAccountMapper socialAccountMapper;
     private final AnalyticsSyncService analyticsSyncService;
     private final TikTokProperties tikTokProperties;
@@ -70,25 +74,49 @@ public class TikTokConnectionServiceImpl implements TikTokConnectionService {
         String accountName = profile.displayName() != null ? profile.displayName()
                 : (profile.username() != null ? profile.username() : "TikTok Account");
 
-        Optional<SocialAccount> existing =
-                socialAccountRepository.findByUserIdAndPlatformAndAccountId(userId, Platform.TIKTOK, openId);
-        boolean isNewConnection = existing.isEmpty();
-
         // uk_platform_account_id is global (platform + account_id), not
-        // scoped to this user - without this check, a different user
-        // connecting the same TikTok account would only fail at
-        // transaction-commit time, after syncAccount() below has already
-        // run as an irreversible side effect.
-        if (isNewConnection && socialAccountRepository.existsByPlatformAndAccountId(Platform.TIKTOK, openId)) {
-            throw new BadRequestException("This TikTok account is already connected to another account.");
-        }
+        // scoped to this user. Three real cases beyond "brand new account":
+        // this user's own previously-disconnected row (reactivate it and
+        // clear its stale analytics), a *different* user's disconnected row
+        // (they gave it up - reclaim it for this user), or a different
+        // user's still-active row (a genuine conflict).
+        Optional<SocialAccount> existing =
+                socialAccountRepository.findByPlatformAndAccountId(Platform.TIKTOK, openId);
 
-        SocialAccount account = existing.orElseGet(() -> SocialAccount.builder()
+        SocialAccount account;
+        boolean shouldNotifyAccountConnected;
+        if (existing.isPresent()) {
+            SocialAccount existingAccount = existing.get();
+            if (existingAccount.getUserId().equals(userId)) {
+                account = existingAccount;
+                shouldNotifyAccountConnected = !existingAccount.isActive();
+                if (!existingAccount.isActive()) {
+                    analyticsRepository.deleteBySocialAccountId(existingAccount.getId());
+                    account.setConnectedAt(LocalDateTime.now());
+                }
+            } else if (!existingAccount.isActive()) {
+                analyticsRepository.deleteBySocialAccountId(existingAccount.getId());
+                socialAccountRepository.delete(existingAccount);
+                socialAccountRepository.flush();
+                account = SocialAccount.builder()
                         .userId(userId)
                         .platform(Platform.TIKTOK)
                         .accountId(openId)
                         .connectedAt(LocalDateTime.now())
-                        .build());
+                        .build();
+                shouldNotifyAccountConnected = true;
+            } else {
+                throw new ConflictException("This TikTok account is already connected to another user");
+            }
+        } else {
+            account = SocialAccount.builder()
+                    .userId(userId)
+                    .platform(Platform.TIKTOK)
+                    .accountId(openId)
+                    .connectedAt(LocalDateTime.now())
+                    .build();
+            shouldNotifyAccountConnected = true;
+        }
 
         account.setAccountName(accountName);
         account.setUsername(profile.username());
@@ -102,14 +130,20 @@ public class TikTokConnectionServiceImpl implements TikTokConnectionService {
         if (tokens.expiresInSeconds() != null) {
             account.setTokenExpiresAt(LocalDateTime.now().plusSeconds(tokens.expiresInSeconds()));
         }
+        account.setConnectionType(AccountConnectionType.OAUTH);
         account.setActive(true);
 
+        // Flushed immediately (not deferred to transaction commit) so a
+        // genuinely concurrent duplicate-openId insert - two users
+        // connecting the same account at the same instant, both passing the
+        // check above - fails right here, before syncAccount()/
+        // notifyAccountConnected() run as irreversible side effects.
         SocialAccount saved = socialAccountRepository.saveAndFlush(account);
         log.info("Connected/updated real TikTok account {} (openId={}) for user {}", saved.getId(), openId, userId);
 
         analyticsSyncService.syncAccount(saved);
 
-        if (isNewConnection) {
+        if (shouldNotifyAccountConnected) {
             notifyAccountConnected(saved);
         }
 

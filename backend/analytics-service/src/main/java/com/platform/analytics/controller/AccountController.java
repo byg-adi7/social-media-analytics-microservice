@@ -46,7 +46,8 @@ public class AccountController {
     @Operation(summary = "Connect a new social media account",
             description = "Links a YouTube, Instagram, TikTok or Facebook account to the current user and performs an initial sync.")
     @ApiResponse(responseCode = "201", description = "Account connected successfully")
-    @ApiResponse(responseCode = "400", description = "Account already connected or invalid platform")
+    @ApiResponse(responseCode = "400", description = "Invalid platform")
+    @ApiResponse(responseCode = "409", description = "Account already connected")
     public SocialAccountResponse connectAccount(@Valid @RequestBody ConnectAccountRequest request) {
         log.info("Incoming request: connect account, platform={}", request.getPlatform());
         UUID userId = SecurityContextUtil.getCurrentUserId();

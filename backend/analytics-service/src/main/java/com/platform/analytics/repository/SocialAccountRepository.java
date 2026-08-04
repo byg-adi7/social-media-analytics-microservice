@@ -25,20 +25,9 @@ public interface SocialAccountRepository extends JpaRepository<SocialAccount, UU
 
     Optional<SocialAccount> findByIdAndUserId(UUID id, UUID userId);
 
-    Optional<SocialAccount> findByUserIdAndPlatformAndAccountId(UUID userId, Platform platform, String accountId);
+    Optional<SocialAccount> findByPlatformAndAccountId(Platform platform, String accountId);
 
     boolean existsByUserIdAndPlatformAndAccountId(UUID userId, Platform platform, String accountId);
-
-    /**
-     * Matches the {@code uk_platform_account_id} unique constraint's actual
-     * scope (platform + account_id, not scoped to a user) - a given
-     * external platform account can only ever be connected by one user in
-     * this system. Used to pre-check before insert, since a specific-user
-     * scoped check would miss the case where a *different* user already
-     * connected this same external account and let the insert fail with a
-     * raw constraint violation instead.
-     */
-    boolean existsByPlatformAndAccountId(Platform platform, String accountId);
 
     long countByUserIdAndActiveTrue(UUID userId);
 

@@ -1,11 +1,14 @@
 package com.platform.analytics.youtube.service.impl;
 
 import com.platform.analytics.constant.Platform;
+import com.platform.analytics.constant.AccountConnectionType;
 import com.platform.analytics.dto.response.SocialAccountResponse;
 import com.platform.analytics.entity.SocialAccount;
 import com.platform.analytics.exception.BadRequestException;
+import com.platform.analytics.exception.ConflictException;
 import com.platform.analytics.exception.ExternalApiException;
 import com.platform.analytics.mapper.SocialAccountMapper;
+import com.platform.analytics.repository.AnalyticsRepository;
 import com.platform.analytics.repository.SocialAccountRepository;
 import com.platform.analytics.security.StateTokenService;
 import com.platform.analytics.service.AnalyticsSyncService;
@@ -39,6 +42,7 @@ public class YouTubeConnectionServiceImpl implements YouTubeConnectionService {
     private final YouTubeDataApiClient youTubeDataApiClient;
     private final StateTokenService stateTokenService;
     private final SocialAccountRepository socialAccountRepository;
+    private final AnalyticsRepository analyticsRepository;
     private final SocialAccountMapper socialAccountMapper;
     private final AnalyticsSyncService analyticsSyncService;
     private final YouTubeProperties youTubeProperties;
@@ -69,27 +73,52 @@ public class YouTubeConnectionServiceImpl implements YouTubeConnectionService {
                 : null;
 
         Optional<SocialAccount> existing =
-                socialAccountRepository.findByUserIdAndPlatformAndAccountId(userId, Platform.YOUTUBE, channelId);
-        boolean isNewConnection = existing.isEmpty();
+                socialAccountRepository.findByPlatformAndAccountId(Platform.YOUTUBE, channelId);
 
         // uk_platform_account_id is global (platform + account_id), not
-        // scoped to this user - the check above only rules out *this* user
-        // already having this channel. Without this second check, a
-        // different user connecting the same channel would fall through to
-        // save() below, which only fails at transaction-commit time (after
-        // syncAccount()/notifyAccountConnected() have already run as
-        // irreversible side effects) - the account-connected push would
-        // fire for a connection that then rolls back.
-        if (isNewConnection && socialAccountRepository.existsByPlatformAndAccountId(Platform.YOUTUBE, channelId)) {
-            throw new BadRequestException("This YouTube channel is already connected to another account.");
+        // scoped to this user. Three real cases beyond "brand new channel":
+        // this user's own previously-disconnected row (reactivate it and
+        // clear its stale analytics), a *different* user's disconnected row
+        // (they gave it up - reclaim it for this user), or a different
+        // user's still-active row (a genuine conflict).
+        SocialAccount account;
+        boolean shouldNotifyAccountConnected;
+        if (existing.isPresent()) {
+            SocialAccount existingAccount = existing.get();
+            if (existingAccount.getUserId().equals(userId)) {
+                account = existingAccount;
+                shouldNotifyAccountConnected = !existingAccount.isActive();
+                if (!existingAccount.isActive()) {
+                    analyticsRepository.deleteBySocialAccountId(existingAccount.getId());
+                    account.setConnectedAt(LocalDateTime.now());
+                }
+            } else if (!existingAccount.isActive()) {
+                // Historical/failed disconnects can leave an inactive row
+                // behind. Remove it before inserting for the current user so
+                // reconnecting the same YouTube channel does not trip
+                // uk_platform_account_id.
+                analyticsRepository.deleteBySocialAccountId(existingAccount.getId());
+                socialAccountRepository.delete(existingAccount);
+                socialAccountRepository.flush();
+                account = SocialAccount.builder()
+                        .userId(userId)
+                        .platform(Platform.YOUTUBE)
+                        .accountId(channelId)
+                        .connectedAt(LocalDateTime.now())
+                        .build();
+                shouldNotifyAccountConnected = true;
+            } else {
+                throw new ConflictException("This YouTube account is already connected to another user");
+            }
+        } else {
+            account = SocialAccount.builder()
+                    .userId(userId)
+                    .platform(Platform.YOUTUBE)
+                    .accountId(channelId)
+                    .connectedAt(LocalDateTime.now())
+                    .build();
+            shouldNotifyAccountConnected = true;
         }
-
-        SocialAccount account = existing.orElseGet(() -> SocialAccount.builder()
-                .userId(userId)
-                .platform(Platform.YOUTUBE)
-                .accountId(channelId)
-                .connectedAt(LocalDateTime.now())
-                .build());
 
         account.setAccountName(channelTitle);
         account.setUsername(channelTitle);
@@ -106,6 +135,7 @@ public class YouTubeConnectionServiceImpl implements YouTubeConnectionService {
         if (tokens.expiresInSeconds() != null) {
             account.setTokenExpiresAt(LocalDateTime.now().plusSeconds(tokens.expiresInSeconds()));
         }
+        account.setConnectionType(AccountConnectionType.OAUTH);
         account.setActive(true);
 
         // Flushed immediately (not deferred to transaction commit) so a
@@ -118,7 +148,7 @@ public class YouTubeConnectionServiceImpl implements YouTubeConnectionService {
 
         analyticsSyncService.syncAccount(saved);
 
-        if (isNewConnection) {
+        if (shouldNotifyAccountConnected) {
             notifyAccountConnected(saved);
         }
 
