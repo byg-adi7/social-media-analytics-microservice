@@ -16,6 +16,8 @@ import com.platform.analytics.mapper.SocialAccountMapper;
 import com.platform.analytics.repository.SocialAccountRepository;
 import com.platform.analytics.security.StateTokenService;
 import com.platform.analytics.service.AnalyticsSyncService;
+import com.platform.notification.constant.NotificationType;
+import com.platform.notification.service.NotificationService;
 import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +25,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -39,6 +43,7 @@ public class FacebookConnectionServiceImpl implements FacebookConnectionService 
     private final SocialAccountMapper socialAccountMapper;
     private final AnalyticsSyncService analyticsSyncService;
     private final FacebookProperties facebookProperties;
+    private final NotificationService notificationService;
 
     @Override
     public String getAuthorizationUrl(UUID userId) {
@@ -64,9 +69,20 @@ public class FacebookConnectionServiceImpl implements FacebookConnectionService 
                 ? pageDetails.picture().data().url()
                 : null;
 
-        SocialAccount account = socialAccountRepository
-                .findByUserIdAndPlatformAndAccountId(userId, Platform.FACEBOOK, page.id())
-                .orElseGet(() -> SocialAccount.builder()
+        Optional<SocialAccount> existing =
+                socialAccountRepository.findByUserIdAndPlatformAndAccountId(userId, Platform.FACEBOOK, page.id());
+        boolean isNewConnection = existing.isEmpty();
+
+        // uk_platform_account_id is global (platform + account_id), not
+        // scoped to this user - without this check, a different user
+        // connecting the same Facebook Page would only fail at
+        // transaction-commit time, after syncAccount() below has already
+        // run as an irreversible side effect.
+        if (isNewConnection && socialAccountRepository.existsByPlatformAndAccountId(Platform.FACEBOOK, page.id())) {
+            throw new BadRequestException("This Facebook Page is already connected to another account.");
+        }
+
+        SocialAccount account = existing.orElseGet(() -> SocialAccount.builder()
                         .userId(userId)
                         .platform(Platform.FACEBOOK)
                         .accountId(page.id())
@@ -85,12 +101,35 @@ public class FacebookConnectionServiceImpl implements FacebookConnectionService 
         account.setTokenExpiresAt(null);
         account.setActive(true);
 
-        SocialAccount saved = socialAccountRepository.save(account);
+        SocialAccount saved = socialAccountRepository.saveAndFlush(account);
         log.info("Connected/updated real Facebook Page {} (pageId={}) for user {}", saved.getId(), page.id(), userId);
 
         analyticsSyncService.syncAccount(saved);
 
+        if (isNewConnection) {
+            notifyAccountConnected(saved);
+        }
+
         return socialAccountMapper.toResponse(saved);
+    }
+
+    /**
+     * Best-effort, same reasoning as SocialAccountServiceImpl's identical
+     * method: a failure creating the notification must never fail an
+     * otherwise-successful account connection.
+     */
+    private void notifyAccountConnected(SocialAccount account) {
+        try {
+            notificationService.notifyUser(
+                    account.getUserId(),
+                    NotificationType.ACCOUNT_CONNECTED,
+                    "Account connected",
+                    "Your Facebook Page was connected successfully.",
+                    Map.of("accountId", account.getId().toString()));
+        } catch (Exception ex) {
+            log.warn("Failed to send account-connected notification for account {}: {}",
+                    account.getId(), ex.getMessage());
+        }
     }
 
     private FacebookAccountsResponse.Page fetchFirstManagedPage(String longLivedUserToken) {

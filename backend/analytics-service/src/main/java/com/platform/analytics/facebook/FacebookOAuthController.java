@@ -4,13 +4,12 @@ import com.platform.analytics.dto.response.AuthorizationUrlResponse;
 import com.platform.analytics.dto.response.SocialAccountResponse;
 import com.platform.analytics.facebook.service.FacebookConnectionService;
 import com.platform.analytics.security.SecurityContextUtil;
+import com.platform.analytics.util.OAuthCallbackRedirect;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -59,12 +58,13 @@ public class FacebookOAuthController {
                           HttpServletResponse response) throws IOException {
         log.info("Incoming request: Facebook OAuth callback");
 
-        SocialAccountResponse account = facebookConnectionService.completeConnection(code, state);
-
-        log.info("Facebook Page {} connected successfully, redirecting to frontend", account.getId());
-
-        response.setStatus(HttpStatus.FOUND.value());
-        response.setHeader(HttpHeaders.LOCATION,
-                facebookProperties.getFrontendRedirectUri() + "?connected=facebook&accountId=" + account.getId());
+        try {
+            SocialAccountResponse account = facebookConnectionService.completeConnection(code, state);
+            log.info("Facebook Page {} connected successfully, redirecting to frontend", account.getId());
+            OAuthCallbackRedirect.success(response, facebookProperties.getFrontendRedirectUri(), "facebook", account.getId().toString());
+        } catch (Exception ex) {
+            log.warn("Facebook OAuth callback failed: {}", ex.getMessage());
+            OAuthCallbackRedirect.failure(response, facebookProperties.getFrontendRedirectUri(), "facebook", ex.getMessage());
+        }
     }
 }

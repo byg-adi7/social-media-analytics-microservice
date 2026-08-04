@@ -93,7 +93,7 @@ class SocialAccountServiceImplTest {
 
         when(socialAccountRepository.existsByPlatformAndAccountId(Platform.YOUTUBE, "yt-123"))
                 .thenReturn(false);
-        when(socialAccountRepository.save(any(SocialAccount.class))).thenReturn(account);
+        when(socialAccountRepository.saveAndFlush(any(SocialAccount.class))).thenReturn(account);
         when(socialAccountMapper.toResponse(account)).thenReturn(SocialAccountResponse.builder().id(accountId).build());
 
         SocialAccountResponse response = socialAccountService.connectAccount(userId, request);
@@ -115,7 +115,7 @@ class SocialAccountServiceImplTest {
 
         when(socialAccountRepository.existsByPlatformAndAccountId(Platform.YOUTUBE, "yt-123"))
                 .thenReturn(false);
-        when(socialAccountRepository.save(any(SocialAccount.class))).thenReturn(account);
+        when(socialAccountRepository.saveAndFlush(any(SocialAccount.class))).thenReturn(account);
         when(socialAccountMapper.toResponse(account)).thenReturn(SocialAccountResponse.builder().id(accountId).build());
         doThrow(new RuntimeException("notification create failed"))
                 .when(notificationService).notifyUser(any(), any(), any(), any(), any());

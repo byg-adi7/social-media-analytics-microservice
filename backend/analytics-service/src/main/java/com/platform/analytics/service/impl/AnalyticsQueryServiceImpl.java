@@ -280,6 +280,30 @@ public class AnalyticsQueryServiceImpl implements AnalyticsQueryService {
                 .build();
     }
 
+    @Override
+    public DayOfWeekEngagementResponse getEngagementByDayOfWeek(UUID userId, AnalyticsQueryRequest query) {
+        LocalDate start = DateRangeUtil.resolveStartDate(query.getStartDate());
+        LocalDate end = DateRangeUtil.resolveEndDate(query.getEndDate());
+        List<Analytics> analyticsList = aggregationHelper.getAnalyticsInRange(userId, start, end, query.getPlatform());
+
+        Map<java.time.DayOfWeek, Double> avgByDay = analyticsList.stream()
+                .collect(Collectors.groupingBy(
+                        a -> a.getAnalyticsDate().getDayOfWeek(),
+                        Collectors.averagingDouble(Analytics::getEngagementRate)));
+
+        List<DayOfWeekEngagementResponse.DayBucket> days = new ArrayList<>();
+        for (java.time.DayOfWeek dow : java.time.DayOfWeek.values()) {
+            Double avg = avgByDay.get(dow);
+            days.add(DayOfWeekEngagementResponse.DayBucket.builder()
+                    .dayOfWeek(dow.name())
+                    .averageEngagementRate(avg != null ? AnalyticsCalculator.round2(avg) : 0.0)
+                    .hasData(avg != null)
+                    .build());
+        }
+
+        return DayOfWeekEngagementResponse.builder().days(days).build();
+    }
+
     private List<String> findTopDays(UUID userId, AnalyticsQueryRequest query, boolean best) {
         LocalDate start = DateRangeUtil.resolveStartDate(query.getStartDate());
         LocalDate end = DateRangeUtil.resolveEndDate(query.getEndDate());

@@ -33,7 +33,11 @@ public class ChartServiceImpl implements ChartService {
 
     @Override
     public MultiLineChartResponse getEngagementChart(UUID userId, AnalyticsQueryRequest query) {
-        return buildMultiLineChart(userId, query, a -> Math.round(a.getEngagementRate()));
+        // Engagement rate is a percentage, not an additive count - reusing
+        // buildMultiLineChart's Long::sum merge (built for followers/views)
+        // would sum multiple accounts' rates together instead of averaging
+        // them, inflating any platform with more than one connected account.
+        return buildEngagementLineChart(userId, query);
     }
 
     @Override
@@ -189,6 +193,51 @@ public class ChartServiceImpl implements ChartService {
         }
 
         return GrowthChartResponse.builder().labels(labels).followerGrowth(growth).build();
+    }
+
+    private MultiLineChartResponse buildEngagementLineChart(UUID userId, AnalyticsQueryRequest query) {
+        LocalDate start = DateRangeUtil.resolveStartDate(query.getStartDate());
+        LocalDate end = DateRangeUtil.resolveEndDate(query.getEndDate());
+
+        List<Analytics> analyticsList = aggregationHelper.getAnalyticsInRange(userId, start, end, null);
+
+        List<LocalDate> days = new ArrayList<>();
+        LocalDate cursor = start;
+        while (!cursor.isAfter(end)) {
+            days.add(cursor);
+            cursor = cursor.plusDays(1);
+        }
+        List<String> labels = days.stream().map(d -> d.format(DAY_LABEL)).toList();
+
+        Map<Platform, Map<LocalDate, List<Analytics>>> byPlatformAndDate = new EnumMap<>(Platform.class);
+        for (Analytics a : analyticsList) {
+            Platform platform = a.getSocialAccount().getPlatform();
+            byPlatformAndDate
+                    .computeIfAbsent(platform, p -> new HashMap<>())
+                    .computeIfAbsent(a.getAnalyticsDate(), d -> new ArrayList<>())
+                    .add(a);
+        }
+
+        Map<String, List<Long>> series = new LinkedHashMap<>();
+        for (Platform platform : Platform.values()) {
+            Map<LocalDate, List<Analytics>> dateMap = byPlatformAndDate.getOrDefault(platform, Map.of());
+            if (dateMap.isEmpty()) {
+                continue;
+            }
+            List<Long> values = days.stream()
+                    .map(d -> {
+                        List<Analytics> rows = dateMap.getOrDefault(d, List.of());
+                        if (rows.isEmpty()) {
+                            return 0L;
+                        }
+                        double average = rows.stream().mapToDouble(Analytics::getEngagementRate).average().orElse(0.0);
+                        return Math.round(average);
+                    })
+                    .toList();
+            series.put(platform.name().toLowerCase(), values);
+        }
+
+        return MultiLineChartResponse.builder().labels(labels).series(series).build();
     }
 
     private MultiLineChartResponse buildMultiLineChart(UUID userId, AnalyticsQueryRequest query,

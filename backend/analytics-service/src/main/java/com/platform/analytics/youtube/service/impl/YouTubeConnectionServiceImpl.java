@@ -72,6 +72,18 @@ public class YouTubeConnectionServiceImpl implements YouTubeConnectionService {
                 socialAccountRepository.findByUserIdAndPlatformAndAccountId(userId, Platform.YOUTUBE, channelId);
         boolean isNewConnection = existing.isEmpty();
 
+        // uk_platform_account_id is global (platform + account_id), not
+        // scoped to this user - the check above only rules out *this* user
+        // already having this channel. Without this second check, a
+        // different user connecting the same channel would fall through to
+        // save() below, which only fails at transaction-commit time (after
+        // syncAccount()/notifyAccountConnected() have already run as
+        // irreversible side effects) - the account-connected push would
+        // fire for a connection that then rolls back.
+        if (isNewConnection && socialAccountRepository.existsByPlatformAndAccountId(Platform.YOUTUBE, channelId)) {
+            throw new BadRequestException("This YouTube channel is already connected to another account.");
+        }
+
         SocialAccount account = existing.orElseGet(() -> SocialAccount.builder()
                 .userId(userId)
                 .platform(Platform.YOUTUBE)
@@ -96,7 +108,12 @@ public class YouTubeConnectionServiceImpl implements YouTubeConnectionService {
         }
         account.setActive(true);
 
-        SocialAccount saved = socialAccountRepository.save(account);
+        // Flushed immediately (not deferred to transaction commit) so a
+        // genuinely concurrent duplicate-channel insert - two users
+        // connecting the same channel at the same instant, both passing the
+        // check above - fails right here, before syncAccount()/
+        // notifyAccountConnected() run, instead of at commit time.
+        SocialAccount saved = socialAccountRepository.saveAndFlush(account);
         log.info("Connected/updated real YouTube account {} (channel={}) for user {}", saved.getId(), channelId, userId);
 
         analyticsSyncService.syncAccount(saved);

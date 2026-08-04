@@ -84,7 +84,7 @@ class YouTubeConnectionServiceImplTest {
         when(youTubeDataApiClient.getMyChannel(anyString(), anyString(), anyBoolean()))
                 .thenReturn(new YouTubeChannelListResponse.Response(List.of(item)));
 
-        when(socialAccountRepository.save(any(SocialAccount.class)))
+        when(socialAccountRepository.saveAndFlush(any(SocialAccount.class)))
                 .thenAnswer(invocation -> {
                     SocialAccount a = invocation.getArgument(0);
                     if (a.getId() == null) {

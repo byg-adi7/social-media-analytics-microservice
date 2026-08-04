@@ -4,13 +4,12 @@ import com.platform.analytics.dto.response.AuthorizationUrlResponse;
 import com.platform.analytics.dto.response.SocialAccountResponse;
 import com.platform.analytics.instagram.service.InstagramConnectionService;
 import com.platform.analytics.security.SecurityContextUtil;
+import com.platform.analytics.util.OAuthCallbackRedirect;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -59,12 +58,13 @@ public class InstagramOAuthController {
                           HttpServletResponse response) throws IOException {
         log.info("Incoming request: Instagram OAuth callback");
 
-        SocialAccountResponse account = instagramConnectionService.completeConnection(code, state);
-
-        log.info("Instagram account {} connected successfully, redirecting to frontend", account.getId());
-
-        response.setStatus(HttpStatus.FOUND.value());
-        response.setHeader(HttpHeaders.LOCATION,
-                instagramProperties.getFrontendRedirectUri() + "?connected=instagram&accountId=" + account.getId());
+        try {
+            SocialAccountResponse account = instagramConnectionService.completeConnection(code, state);
+            log.info("Instagram account {} connected successfully, redirecting to frontend", account.getId());
+            OAuthCallbackRedirect.success(response, instagramProperties.getFrontendRedirectUri(), "instagram", account.getId().toString());
+        } catch (Exception ex) {
+            log.warn("Instagram OAuth callback failed: {}", ex.getMessage());
+            OAuthCallbackRedirect.failure(response, instagramProperties.getFrontendRedirectUri(), "instagram", ex.getMessage());
+        }
     }
 }

@@ -15,6 +15,8 @@ import com.platform.analytics.tiktok.api.dto.TikTokTokenResponse;
 import com.platform.analytics.tiktok.api.dto.TikTokUserInfoResponse;
 import com.platform.analytics.tiktok.service.TikTokConnectionService;
 import com.platform.analytics.tiktok.service.TikTokOAuthService;
+import com.platform.notification.constant.NotificationType;
+import com.platform.notification.service.NotificationService;
 import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +24,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -39,6 +43,7 @@ public class TikTokConnectionServiceImpl implements TikTokConnectionService {
     private final SocialAccountMapper socialAccountMapper;
     private final AnalyticsSyncService analyticsSyncService;
     private final TikTokProperties tikTokProperties;
+    private final NotificationService notificationService;
 
     @Override
     public String getAuthorizationUrl(UUID userId) {
@@ -65,9 +70,20 @@ public class TikTokConnectionServiceImpl implements TikTokConnectionService {
         String accountName = profile.displayName() != null ? profile.displayName()
                 : (profile.username() != null ? profile.username() : "TikTok Account");
 
-        SocialAccount account = socialAccountRepository
-                .findByUserIdAndPlatformAndAccountId(userId, Platform.TIKTOK, openId)
-                .orElseGet(() -> SocialAccount.builder()
+        Optional<SocialAccount> existing =
+                socialAccountRepository.findByUserIdAndPlatformAndAccountId(userId, Platform.TIKTOK, openId);
+        boolean isNewConnection = existing.isEmpty();
+
+        // uk_platform_account_id is global (platform + account_id), not
+        // scoped to this user - without this check, a different user
+        // connecting the same TikTok account would only fail at
+        // transaction-commit time, after syncAccount() below has already
+        // run as an irreversible side effect.
+        if (isNewConnection && socialAccountRepository.existsByPlatformAndAccountId(Platform.TIKTOK, openId)) {
+            throw new BadRequestException("This TikTok account is already connected to another account.");
+        }
+
+        SocialAccount account = existing.orElseGet(() -> SocialAccount.builder()
                         .userId(userId)
                         .platform(Platform.TIKTOK)
                         .accountId(openId)
@@ -88,12 +104,35 @@ public class TikTokConnectionServiceImpl implements TikTokConnectionService {
         }
         account.setActive(true);
 
-        SocialAccount saved = socialAccountRepository.save(account);
+        SocialAccount saved = socialAccountRepository.saveAndFlush(account);
         log.info("Connected/updated real TikTok account {} (openId={}) for user {}", saved.getId(), openId, userId);
 
         analyticsSyncService.syncAccount(saved);
 
+        if (isNewConnection) {
+            notifyAccountConnected(saved);
+        }
+
         return socialAccountMapper.toResponse(saved);
+    }
+
+    /**
+     * Best-effort, same reasoning as SocialAccountServiceImpl's identical
+     * method: a failure creating the notification must never fail an
+     * otherwise-successful account connection.
+     */
+    private void notifyAccountConnected(SocialAccount account) {
+        try {
+            notificationService.notifyUser(
+                    account.getUserId(),
+                    NotificationType.ACCOUNT_CONNECTED,
+                    "Account connected",
+                    "Your TikTok account was connected successfully.",
+                    Map.of("accountId", account.getId().toString()));
+        } catch (Exception ex) {
+            log.warn("Failed to send account-connected notification for account {}: {}",
+                    account.getId(), ex.getMessage());
+        }
     }
 
     private TikTokUserInfoResponse.User fetchProfile(String accessToken) {

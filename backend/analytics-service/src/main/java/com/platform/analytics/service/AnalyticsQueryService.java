@@ -25,4 +25,6 @@ public interface AnalyticsQueryService {
     EngagementResponse getEngagement(UUID userId, AnalyticsQueryRequest query);
 
     GrowthResponse getGrowth(UUID userId, AnalyticsQueryRequest query);
+
+    DayOfWeekEngagementResponse getEngagementByDayOfWeek(UUID userId, AnalyticsQueryRequest query);
 }

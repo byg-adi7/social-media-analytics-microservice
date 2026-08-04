@@ -107,6 +107,20 @@ public class AnalyticsController {
         return analyticsQueryService.getGrowth(userId, buildQuery(startDate, endDate, platform));
     }
 
+    @GetMapping("/engagement-by-day")
+    @Operation(summary = "Get real average engagement rate by day of week",
+            description = "Groups the user's own synced Analytics rows by day-of-week (Monday..Sunday) and " +
+                    "averages engagement rate per day - no hour-of-day breakdown exists since Analytics rows " +
+                    "are one per account per calendar day.")
+    public DayOfWeekEngagementResponse getEngagementByDayOfWeek(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) Platform platform) {
+        log.info("Incoming request: get engagement by day of week");
+        UUID userId = SecurityContextUtil.getCurrentUserId();
+        return analyticsQueryService.getEngagementByDayOfWeek(userId, buildQuery(startDate, endDate, platform));
+    }
+
     private AnalyticsQueryRequest buildQuery(LocalDate startDate, LocalDate endDate, Platform platform) {
         return AnalyticsQueryRequest.builder()
                 .startDate(startDate)

@@ -77,7 +77,12 @@ public class SocialAccountServiceImpl implements SocialAccountService {
                 .active(true)
                 .build();
 
-        SocialAccount saved = socialAccountRepository.save(account);
+        // Flushed immediately, not deferred to commit - see
+        // YouTubeConnectionServiceImpl.completeConnection for why: a
+        // constraint violation surfacing only at commit time would happen
+        // after syncAccount()/notifyAccountConnected() below already ran as
+        // irreversible side effects.
+        SocialAccount saved = socialAccountRepository.saveAndFlush(account);
         log.info("Connected new {} account {} for user {}", saved.getPlatform(), saved.getId(), userId);
 
         // Perform an initial sync so the dashboard has data immediately.
